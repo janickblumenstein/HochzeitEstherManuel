@@ -3,7 +3,7 @@ const A = window.App, { db, ref, set, onValue, update, get, remove, $, toast } =
 
 const DURATION_SEC = 15;
 let hostTimer = null; 
-let currentPhase = null; // Neu: Merkt sich die aktuelle Phase für die Spieler
+let currentPhase = null; // Merkt sich die aktuelle Phase für die Spieler
 
 const prevReady = A.listeners.onReady;
 A.listeners.onReady = ()=>{
@@ -16,12 +16,19 @@ A.listeners.onReady = ()=>{
     if (d) {
       A.switchTab("Game"); 
     } else {
-      currentPhase = null; // Reset, wenn das Spiel gelöscht wurde
+      // 🚀 NEU: Automatischer Rücksprung, wenn das Spiel geschlossen wird!
+      if (currentPhase !== null) {
+        if (A.isHost) {
+          A.switchTab("Host");  // Host geht zurück ins Steuer-Panel
+        } else if (!A.isBeamer) {
+          A.switchTab("Score"); // Gäste gehen auf die Rangliste
+        }
+      }
+      currentPhase = null; // Reset
     }
 
     // 🚀 DER 80-GÄSTE PERFORMANCE FIX 🚀
-    // Wenn das Spiel läuft und wir ein normaler Spieler sind, 
-    // ignorieren wir alle Firebase-Updates! Das verhindert das Zurückspringen.
+    // Ignoriert Firebase-Updates während des Tippens, um Ruckeln zu verhindern
     if (!A.isHost && !A.isBeamer && d && d.phase === "running" && currentPhase === "running") {
       return; 
     }
