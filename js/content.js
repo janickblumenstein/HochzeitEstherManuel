@@ -5,8 +5,8 @@
 window.HochzeitContent = {
 
   // Namen des Paares (können im Host-Panel live geändert werden)
-  braut: "Anna",
-  braeutigam: "Max",
+  braut: "Esther",
+  braeutigam: "Manuel",
 
   // ═══════════════════════════════════════════════════════
   // FRAGEN-POOL
