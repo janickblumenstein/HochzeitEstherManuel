@@ -398,7 +398,6 @@ async function revealCurrent() {
   const breakdown = { braut: 0, braeutigam: 0, a: 0, b: 0 };
   const ranking = [];
 
-  // 1. Zählung
   for (const [uid, ans] of Object.entries(answers)) {
     const p = players[uid];
     if (!p) continue;
@@ -414,36 +413,52 @@ async function revealCurrent() {
   let winner = null;
   let finalCorrectAnswer = g.answer;
 
-  // 2. Logik je nach Typ
+  // 1. EHE-PROGNOSE (mit echtem Gleichstand)
   if (g.type === "prognose") {
-    // Mehrheit ermitteln
-    finalCorrectAnswer = breakdown.braut >= breakdown.braeutigam ? "braut" : "braeutigam";
-    
-    // Wer hat mit der Mehrheit gestimmt?
-    for (const [uid, ans] of Object.entries(answers)) {
-      if (ans === finalCorrectAnswer) {
-        const p = players[uid];
-        if (p) {
-          if (p.team === "braut" || p.team === "braeutigam") teamStats[p.team].correct++;
-          await awardScore(uid, 1); 
+    if (breakdown.braut > breakdown.braeutigam) finalCorrectAnswer = "braut";
+    else if (breakdown.braeutigam > breakdown.braut) finalCorrectAnswer = "braeutigam";
+    else finalCorrectAnswer = "tie"; // 🚀 NEU: Echter Gleichstand
+
+    if (finalCorrectAnswer !== "tie") {
+      for (const [uid, ans] of Object.entries(answers)) {
+        if (ans === finalCorrectAnswer) {
+          const p = players[uid];
+          if (p) {
+            if (p.team === "braut" || p.team === "braeutigam") teamStats[p.team].correct++;
+            await awardScore(uid, 1); 
+          }
         }
       }
+      for (const k of ["braut", "braeutigam"]) {
+        teamStats[k].rate = teamStats[k].total > 0 ? (teamStats[k].correct / teamStats[k].total) : 0;
+      }
+      if (teamStats.braut.rate > teamStats.braeutigam.rate) winner = "braut";
+      else if (teamStats.braeutigam.rate > teamStats.braut.rate) winner = "braeutigam";
     }
-    // Team-Sieg nach Quote
-    for (const k of ["braut", "braeutigam"]) {
-      teamStats[k].rate = teamStats[k].total > 0 ? (teamStats[k].correct / teamStats[k].total) : 0;
-    }
-    if (teamStats.braut.rate > teamStats.braeutigam.rate) winner = "braut";
-    else if (teamStats.braeutigam.rate > teamStats.braut.rate) winner = "braeutigam";
-
-  } else if (g.type === "estimate") {
+  } 
+  // 2. SCHÄTZFRAGEN (Faire Punkte bei gleichem Tipp)
+  else if (g.type === "estimate") {
     ranking.sort((a, b) => a.diff - b.diff);
-    for (let i = 0; i < Math.min(3, ranking.length); i++) {
-      await awardScore(ranking[i].uid, 3 - i);
+    
+    let currentPts = 3;
+    let lastDiff = ranking.length > 0 ? ranking[0].diff : -1;
+    let rankPosition = 0; // 0=Gold, 1=Silber, 2=Bronze
+
+    for (let i = 0; i < ranking.length; i++) {
+      if (ranking[i].diff > lastDiff) {
+        rankPosition++;
+        currentPts = 3 - rankPosition;
+        lastDiff = ranking[i].diff;
+      }
+      if (currentPts <= 0) break; // Nur die besten 3 Abweichungs-Gruppen punkten
+
+      await awardScore(ranking[i].uid, currentPts);
+      ranking[i].awardedPts = currentPts; // Speichern fürs UI
     }
     if (ranking.length > 0) winner = ranking[0].team;
-  } else {
-    // Normales Quiz
+  } 
+  // 3. NORMALES QUIZ
+  else {
     for (const [uid, ans] of Object.entries(answers)) {
       if (ans === g.answer) {
         const p = players[uid];
@@ -460,7 +475,6 @@ async function revealCurrent() {
     else if (teamStats.braeutigam.rate > teamStats.braut.rate) winner = "braeutigam";
   }
 
-  // Rundensieg
   if (winner) {
     const tRef = ref(db, `rooms/${A.room}/teams/${winner}`);
     const cur = (await get(tRef)).val() || 0;
@@ -469,7 +483,7 @@ async function revealCurrent() {
 
   await update(ref(db, `rooms/${A.room}/game`), { 
     phase: "reveal", 
-    answer: finalCorrectAnswer, // Setzt die Mehrheit als Lösung
+    answer: finalCorrectAnswer,
     result: { teamStats, breakdown, ranking, roundWinner: winner } 
   });
 }
@@ -484,16 +498,18 @@ function buildRevealView(g){
   // Persönliches Feedback
   if (!A.isHost && !A.isBeamer) {
     const myAns = (g.answers || {})[A.user];
+    
     if (g.type === "estimate") {
-       const myRankIdx = (r.ranking || []).findIndex(e => e.uid === A.user);
-       if (myRankIdx >= 0 && myRankIdx < 3) {
-         const pts = [3, 2, 1][myRankIdx];
-         html += `<div class="flash gold" style="text-align:center; font-size:1.1rem; box-shadow: 0 4px 15px rgba(212,175,55,0.3);">🎉 Stark geschätzt! Du bist Platz ${myRankIdx+1} und holst <b>+${pts} Punkte</b>!</div>`;
+       const myEntry = (r.ranking || []).find(e => e.uid === A.user);
+       if (myEntry && myEntry.awardedPts) {
+         html += `<div class="flash gold" style="text-align:center; font-size:1.1rem; box-shadow: 0 4px 15px rgba(212,175,55,0.3);">🎉 Stark geschätzt! Du holst <b>+${myEntry.awardedPts} Punkte</b>!</div>`;
        } else if (myAns !== undefined) {
-         html += `<div class="flash" style="text-align:center;">Guter Versuch, aber leider nicht in den Top 3.</div>`;
+         html += `<div class="flash" style="text-align:center;">Guter Versuch, aber leider nicht in den Punkterängen.</div>`;
        }
     } else if (g.type === "prognose") {
-       if (myAns === g.answer) {
+       if (g.answer === "tie") {
+         html += `<div class="flash" style="text-align:center;">Gleichstand! Das Orakel ist unentschlossen – niemand punktet.</div>`;
+       } else if (myAns === g.answer) {
          html += `<div class="flash gold" style="text-align:center; font-size:1.1rem; box-shadow: 0 4px 15px rgba(78,207,106,0.3);">🎉 Du bist mit der Mehrheit! <b>+1 Punkt</b>!</div>`;
        } else if (myAns !== undefined) {
          html += `<div class="flash warn" style="text-align:center; font-size:1.1rem;">❌ Du lagst daneben!</div>`;
@@ -553,11 +569,14 @@ function buildRevealView(g){
     html += `<div class="flash gold"><b>✓ Richtige Antwort:</b> ${g.answer}${g.unit ? ' ' + g.unit : ''}</div>`;
     if(r.ranking && r.ranking.length){
       html += `<h3>Näher dran – besser:</h3>`;
-      r.ranking.forEach((e, i)=>{
-        const medal = ['🥇','🥈','🥉'][i] || ((i+1)+'.');
-        const pts = i < 3 ? ['+3','+2','+1'][i] : '';
+      r.ranking.forEach((e) => {
+        let medal = "🔹";
+        if (e.awardedPts === 3) medal = "🥇";
+        if (e.awardedPts === 2) medal = "🥈";
+        if (e.awardedPts === 1) medal = "🥉";
+        const ptsStr = e.awardedPts ? `+${e.awardedPts}` : '';
         const tmIcon = e.team === "braut" ? "👰" : "🤵";
-        html += `<div class="score-row"><span>${medal} ${tmIcon} ${e.p}: ${e.v}${g.unit?' '+g.unit:''} <span class="sub">(Δ ${e.diff.toFixed(1)})</span></span><strong>${pts}</strong></div>`;
+        html += `<div class="score-row"><span>${medal} ${tmIcon} ${e.p}: ${e.v}${g.unit?' '+g.unit:''} <span class="sub">(Δ ${e.diff.toFixed(1)})</span></span><strong>${ptsStr}</strong></div>`;
       });
     } else {
       html += `<div class="flash warn">Niemand hat geantwortet</div>`;
@@ -566,7 +585,11 @@ function buildRevealView(g){
   else if(g.type === "prognose"){
     const counts = r.breakdown || { braut: 0, braeutigam: 0 };
     const total = (counts.braut || 0) + (counts.braeutigam || 0) || 1;
-    html += `<div class="flash rose">💍 Das Orakel hat entschieden:</div>`;
+    if (g.answer === "tie") {
+      html += `<div class="flash rose">💍 Das Orakel sagt: Unentschieden!</div>`;
+    } else {
+      html += `<div class="flash rose">💍 Das Orakel hat entschieden:</div>`;
+    }
     html += `<div class="result-bar">
       <div class="rb braut" style="width:${counts.braut/total*100}%">${counts.braut}</div>
       <div class="rb braeutigam" style="width:${counts.braeutigam/total*100}%">${counts.braeutigam}</div>

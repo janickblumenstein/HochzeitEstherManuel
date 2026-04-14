@@ -166,13 +166,16 @@ function renderRevealBeamer(g, nameB, nameBr){
     html += `<div class="question" style="color:var(--green);font-size:3.5rem">✓ ${g.answer}${g.unit?' '+g.unit:''}</div>`;
     if(r.ranking && r.ranking.length){
       html += `<div style="max-width:700px;margin:0 auto;text-align:left;font-size:1.5rem">`;
-      r.ranking.slice(0, 5).forEach((e, i)=>{
-        const medal = ['🥇','🥈','🥉'][i] || ((i+1)+'.');
-        const pts = i < 3 ? ['+3','+2','+1'][i] : '';
+      r.ranking.slice(0, 5).forEach((e) => {
+        let medal = "🔹";
+        if (e.awardedPts === 3) medal = "🥇";
+        if (e.awardedPts === 2) medal = "🥈";
+        if (e.awardedPts === 1) medal = "🥉";
+        const ptsStr = e.awardedPts ? `+${e.awardedPts}` : '';
         const tmColor = e.team === "braut" ? "var(--braut)" : "var(--braeutigam)";
         html += `<div style="padding:10px 20px;margin:8px 0;background:rgba(255,255,255,.04);border-left:4px solid ${tmColor};border-radius:8px;display:flex;justify-content:space-between">
           <span>${medal} ${e.p}: ${e.v}${g.unit?' '+g.unit:''}</span>
-          <strong style="color:var(--gold)">${pts}</strong>
+          <strong style="color:var(--gold)">${ptsStr}</strong>
         </div>`;
       });
       html += `</div>`;
@@ -180,7 +183,11 @@ function renderRevealBeamer(g, nameB, nameBr){
   }
   else if(g.type === "prognose"){
     const counts = r.breakdown || { braut: 0, braeutigam: 0 };
-    html += `<div class="sub-big" style="color:var(--rose)">💍 Das Orakel sagt:</div>`;
+    if (g.answer === "tie") {
+        html += `<div class="sub-big" style="color:var(--rose)">💍 Das Orakel ist unentschlossen (Gleichstand)!</div>`;
+    } else {
+        html += `<div class="sub-big" style="color:var(--rose)">💍 Das Orakel sagt:</div>`;
+    }
     html += buildBigBar(counts.braut, counts.braeutigam, "👰 "+nameB, nameBr+" 🤵", r.roundWinner);
   }
 

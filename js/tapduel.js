@@ -116,13 +116,27 @@ async function finishTapDuel() {
     await set(tRef, cur + 1);
   }
 
+  // 🚀 NEU: Faire Punkteverteilung für Tapper (auch bei Gleichstand!)
   tappers.sort((a, b) => b.count - a.count);
-  const topTappers = tappers.slice(0, 3);
-  const points = [10, 5, 3];
   
-  for (let i = 0; i < topTappers.length; i++) {
-    await awardScore(topTappers[i].uid, points[i]);
-    topTappers[i].pts = points[i]; 
+  const topTappers = [];
+  const points = [10, 5, 3];
+  let currentRank = 0;
+  let lastCount = tappers.length > 0 ? tappers[0].count : -1;
+
+  for (let i = 0; i < tappers.length; i++) {
+    // Wenn die Taps weniger sind als beim Vorherigen, rutschen wir einen Platz runter
+    if (tappers[i].count < lastCount) {
+      currentRank++;
+      lastCount = tappers[i].count;
+    }
+    // Wenn wir die Top 3 (Index 0, 1, 2) verlassen haben, brechen wir ab
+    if (currentRank > 2) break;
+
+    const pts = points[currentRank];
+    await awardScore(tappers[i].uid, pts);
+    tappers[i].pts = pts; // Punkte merken fürs UI
+    topTappers.push(tappers[i]); // In die Siegerliste aufnehmen
   }
 
   await update(ref(db, `rooms/${A.room}/tapduel`), {
@@ -262,8 +276,13 @@ function render(){
 
     if (d.topTappers && d.topTappers.length > 0) {
       html += `<h3 style="text-align:center; margin-top:24px; color:var(--gold);">🔥 Die schnellsten Finger</h3>`;
-      d.topTappers.forEach((t, i) => {
-        const medal = ['🥇','🥈','🥉'][i];
+      d.topTappers.forEach((t) => {
+        // Medaille basiert jetzt auf den erreichten Punkten!
+        let medal = "🔹";
+        if (t.pts === 10) medal = "🥇";
+        if (t.pts === 5) medal = "🥈";
+        if (t.pts === 3) medal = "🥉";
+        
         const isMe = t.uid === A.user ? 'style="border:1px solid var(--gold); background:rgba(212,175,55,.15);"' : '';
         html += `<div class="score-row" ${isMe}>
           <span>${medal} ${t.name} <span class="sub">(${t.count} Taps)</span></span>
