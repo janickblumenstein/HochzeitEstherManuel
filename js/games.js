@@ -437,26 +437,45 @@ async function revealCurrent() {
     }
   } 
   // 2. SCHÄTZFRAGEN (Faire Punkte bei gleichem Tipp)
+  // 2. SCHÄTZFRAGEN (Faire Punkte & Team-Wertung)
   else if (g.type === "estimate") {
     ranking.sort((a, b) => a.diff - b.diff);
     
     let currentPts = 3;
     let lastDiff = ranking.length > 0 ? ranking[0].diff : -1;
-    let rankPosition = 0; // 0=Gold, 1=Silber, 2=Bronze
+    let rankPosition = 0; 
 
+    // Punkte an Individuen verteilen
     for (let i = 0; i < ranking.length; i++) {
       if (ranking[i].diff > lastDiff) {
         rankPosition++;
         currentPts = 3 - rankPosition;
         lastDiff = ranking[i].diff;
       }
-      if (currentPts <= 0) break; // Nur die besten 3 Abweichungs-Gruppen punkten
+      if (currentPts <= 0) break;
 
       await awardScore(ranking[i].uid, currentPts);
-      ranking[i].awardedPts = currentPts; // Speichern fürs UI
+      ranking[i].awardedPts = currentPts;
     }
-    if (ranking.length > 0) winner = ranking[0].team;
-  } 
+
+    // --- NEUE TEAM-WERTUNG ---
+    if (ranking.length > 0) {
+      const bestDiff = ranking[0].diff;
+      // Wir suchen alle Spieler, die diese beste Abweichung erreicht haben
+      const topWinners = ranking.filter(r => r.diff === bestDiff);
+      
+      let brautWinners = topWinners.filter(r => r.team === "braut").length;
+      let braeutigamWinners = topWinners.filter(r => r.team === "braeutigam").length;
+
+      if (brautWinners > braeutigamWinners) {
+        winner = "braut";
+      } else if (braeutigamWinners > brautWinners) {
+        winner = "braeutigam";
+      } else {
+        winner = null; // Absoluter Gleichstand bei den Top-Tipps -> Unentschieden
+      }
+    }
+  }
   // 3. NORMALES QUIZ
   else {
     for (const [uid, ans] of Object.entries(answers)) {
