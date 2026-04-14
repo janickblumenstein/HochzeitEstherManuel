@@ -17,8 +17,10 @@ A.listeners.onReady = ()=>{
     
     // 🚀 NEU: Automatischer Tab-Wechsel für das Quiz
     if (newGame && (!prevGame || prevGame.q !== newGame.q || prevGame.phase !== newGame.phase)) {
-        A.switchTab("Game");
+    if (!A.isHost && !A.isBeamer) {
+      A.switchTab("Game");
     }
+  }
 
     renderGame();
     renderHostStatus();
@@ -294,21 +296,26 @@ function renderGame(){
         <div class="timer-bar"><div class="fill" id="timerFill"></div></div>`;
     }
 
+    // Wir berechnen die Zahlen einmal hier oben, dann ist der Code sauberer
+    const cnt = Object.keys(g.answers || {}).length;
+    const total = Object.values(A.players).length;
+
     if(A.isHost){
       // Host sieht Live-Status, keine Antwort-Inputs
-      const answered = Object.keys(g.answers || {}).length;
-      const total = Object.values(A.players).length;
       html += `<div class="flash gold">👑 Du bist Host – du spielst nicht mit.</div>`;
-      html += `<div class="flash">${answered} / ${total} haben geantwortet</div>`;
+      // HIER ist die neue Klasse: live-counter-text
+      html += `<div class="flash live-counter-text">${cnt} / ${total} haben geantwortet</div>`;
       html += `<div class="sub" style="text-align:center">Steuerung im Host-Tab unten</div>`;
     } else if(myAns !== undefined){
       const label = labelForAnswer(g, myAns);
       html += `<div class="flash">✅ Deine Antwort: <b>${label}</b></div>`;
-      const cnt = Object.keys(g.answers || {}).length;
-      const total = Object.values(A.players).length;
-      html += `<div class="sub" style="text-align:center">${cnt}/${total} haben geantwortet</div>`;
+      // HIER ist die neue Klasse: live-counter-text
+      html += `<div class="sub live-counter-text" style="text-align:center">${cnt} / ${total} haben geantwortet</div>`;
     } else {
+      // Gast tippt gerade noch
       html += buildAnswerInput(g);
+      // NEU: Damit die Gäste beim Tippen sehen, wie viele schon fertig sind!
+      html += `<div class="sub live-counter-text" style="text-align:center; margin-top: 15px;">${cnt} / ${total} haben geantwortet</div>`;
     }
   }
   // ===== REVEAL PHASE =====
