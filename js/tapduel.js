@@ -95,11 +95,14 @@ async function finishTapDuel() {
   const players = A.players || {};
   const teamStats = { braut: { sum: 0, n: 0 }, braeutigam: { sum: 0, n: 0 } };
 
+  const tappers = []; // Sammelt alle, die getippt haben
+  
   for (const [uid, count] of Object.entries(taps)) {
     const p = players[uid];
     if (p && count > 0) {
       teamStats[p.team].sum += count;
       teamStats[p.team].n++;
+      tappers.push({ uid, name: p.name || uid.split('_')[0], count }); // Für die Rangliste speichern
     }
   }
 
@@ -116,9 +119,19 @@ async function finishTapDuel() {
     await set(tRef, cur + 1);
   }
 
+  // 🚀 NEU: Top 3 Tapper belohnen (10, 5, 3 Punkte)
+  tappers.sort((a, b) => b.count - a.count);
+  const topTappers = tappers.slice(0, 3);
+  const points = [10, 5, 3];
+  
+  for (let i = 0; i < topTappers.length; i++) {
+    await awardScore(topTappers[i].uid, points[i]);
+    topTappers[i].pts = points[i]; // Punkte merken fürs UI
+  }
+
   await update(ref(db, `rooms/${A.room}/tapduel`), {
     phase: "done",
-    teamStats, winner
+    teamStats, winner, topTappers // Rangliste in die DB schreiben
   });
 }
 

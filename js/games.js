@@ -4,16 +4,27 @@ const A = window.App, { db, ref, set, onValue, update, get, remove, $, toast, aw
 const prevReady = A.listeners.onReady;
 A.listeners.onReady = ()=>{
   if(prevReady) prevReady();
+  
   onValue(ref(db, `rooms/${A.room}/quiz`), snap=>{
     A.state.quiz = snap.val();
     renderHostStatus();
   });
+  
   onValue(ref(db, `rooms/${A.room}/game`), snap=>{
-    A.state.game = snap.val();
+    const prevGame = A.state.game;
+    const newGame = snap.val();
+    A.state.game = newGame;
+    
+    // 🚀 NEU: Automatischer Tab-Wechsel für das Quiz
+    if (newGame && (!prevGame || prevGame.q !== newGame.q || prevGame.phase !== newGame.phase)) {
+        A.switchTab("Game");
+    }
+
     renderGame();
     renderHostStatus();
     maybeStartClientTimer();
   });
+  
   bindHostUI();
   populateSetDropdown();
 };
@@ -369,40 +380,55 @@ async function revealCurrent() {
   const answers = g.answers || {};
   const players = A.players || {};
   
-  const teamStats = { 
-    braut: { correct: 0, total: 0, rate: 0 }, 
-    braeutigam: { correct: 0, total: 0, rate: 0 } 
-  };
+  const teamStats = { braut: { correct: 0, total: 0, rate: 0 }, braeutigam: { correct: 0, total: 0, rate: 0 } };
+  const breakdown = {};
+  const ranking = []; 
 
   for (const [uid, ans] of Object.entries(answers)) {
     const p = players[uid];
-    if (!p) continue; // Falls jemand gelöscht wurde
+    if (!p) continue;
 
     const t = p.team;
-    teamStats[t].total++; // Wer geantwortet hat, zählt für den Nenner
+    if (t === "braut" || t === "braeutigam") teamStats[t].total++; 
+    
+    breakdown[ans] = (breakdown[ans] || 0) + 1;
 
-    let isCorrect = false;
+    // Punkte & Ranking sammeln
     if (g.type === "estimate") {
-       // Schätzfragen logik bleibt (Top 3 bekommen Einzelpunkte)
-    } else {
+       const diff = Math.abs(ans - g.answer);
+       ranking.push({ uid, p: p.name || uid.split('_')[0], team: p.team, v: ans, diff });
+    } else if (g.type !== "prognose") {
       if (ans === g.answer) {
-        isCorrect = true;
-        teamStats[t].correct++;
-        await awardScore(uid, 1); // Einzelpunkt
+        if (t === "braut" || t === "braeutigam") teamStats[t].correct++;
+        await awardScore(uid, 1); 
       }
     }
   }
 
-  // Prozentuale Trefferquote berechnen
-  for (const k of ["braut", "braeutigam"]) {
-    teamStats[k].rate = teamStats[k].total > 0 ? (teamStats[k].correct / teamStats[k].total) : 0;
+  let winner = null;
+
+  // Auswertung je nach Fragentyp
+  if (g.type === "estimate") {
+     ranking.sort((a,b) => a.diff - b.diff);
+     // Top 3 bekommen +3, +2, +1 Punkte
+     for(let i=0; i<Math.min(3, ranking.length); i++){
+       await awardScore(ranking[i].uid, 3 - i); 
+     }
+     if (ranking.length > 0) winner = ranking[0].team; // Team des besten Schätzers gewinnt die Runde
+  } else if (g.type === "prognose") {
+     const b = breakdown["braut"] || 0;
+     const br = breakdown["braeutigam"] || 0;
+     if (b > br) winner = "braut";
+     else if (br > b) winner = "braeutigam";
+  } else {
+     for (const k of ["braut", "braeutigam"]) {
+       teamStats[k].rate = teamStats[k].total > 0 ? (teamStats[k].correct / teamStats[k].total) : 0;
+     }
+     if (teamStats.braut.rate > teamStats.braeutigam.rate) winner = "braut";
+     else if (teamStats.braeutigam.rate > teamStats.braut.rate) winner = "braeutigam";
   }
 
-  // Rundensieger nach Quote (%)
-  let winner = null;
-  if (teamStats.braut.rate > teamStats.braeutigam.rate) winner = "braut";
-  else if (teamStats.braeutigam.rate > teamStats.braut.rate) winner = "braeutigam";
-
+  // Rundensieg eintragen
   if (winner) {
     const tRef = ref(db, `rooms/${A.room}/teams/${winner}`);
     const cur = (await get(tRef)).val() || 0;
@@ -411,7 +437,7 @@ async function revealCurrent() {
 
   await update(ref(db, `rooms/${A.room}/game`), { 
     phase: "reveal", 
-    result: { teamStats, roundWinner: winner } 
+    result: { teamStats, breakdown, ranking, roundWinner: winner } 
   });
 }
 
@@ -421,6 +447,29 @@ function buildRevealView(g){
   const nameBr = m.braeutigam || "Bräutigam";
   const r = g.result || {};
   let html = "";
+
+  // ---> NEU: Persönliches Live-Feedback für den User <---
+  if (!A.isHost && !A.isBeamer) {
+    const myAns = (g.answers || {})[A.user];
+    if (g.type === "estimate") {
+       const myRankIdx = (r.ranking || []).findIndex(e => e.uid === A.user);
+       if (myRankIdx >= 0 && myRankIdx < 3) {
+         const pts = [3, 2, 1][myRankIdx];
+         html += `<div class="flash gold" style="text-align:center; font-size:1.1rem; box-shadow: 0 4px 15px rgba(212,175,55,0.3);">🎉 Stark geschätzt! Du bist Platz ${myRankIdx+1} und holst <b>+${pts} Punkte</b>!</div>`;
+       } else if (myAns !== undefined) {
+         html += `<div class="flash" style="text-align:center;">Guter Versuch, aber leider nicht in den Top 3.</div>`;
+       }
+    } else if (g.type !== "prognose") {
+       if (myAns === g.answer) {
+         html += `<div class="flash gold" style="text-align:center; font-size:1.1rem; box-shadow: 0 4px 15px rgba(78,207,106,0.3);">🎉 Richtig! <b>+1 Punkt</b> für dich!</div>`;
+       } else if (myAns !== undefined) {
+         html += `<div class="flash warn" style="text-align:center; font-size:1.1rem;">❌ Leider falsch!</div>`;
+       } else {
+         html += `<div class="flash" style="text-align:center; opacity: 0.7;">Du hast keine Antwort abgegeben.</div>`;
+       }
+    }
+  }
+  // ---> ENDE NEU <---
 
   // Richtige Antwort
   if(g.type === "who" || g.type === "photo" || g.type === "family"){
