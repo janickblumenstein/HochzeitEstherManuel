@@ -123,34 +123,43 @@ async function autoLogin(uid) {
   }
 }
 
+// === core.js Korrekturen ===
+
 async function start(takeHost, team) {
   const inputName = App.$("nameInp").value.trim();
   if (!inputName) return alert("Bitte Namen eingeben!");
   if (!takeHost && !team) return alert("Bitte Team wählen!");
 
   let finalName = inputName;
+  // UID aus Speicher laden oder neu generieren
   let uid = localStorage.getItem("wedding_uid") || (inputName + "_" + Math.random().toString(36).substr(2, 4));
 
-  // Namenskollision prüfen
+  // Namenskollision prüfen (nur für Spieler wichtig)
   const playersSnap = await get(ref(db, `rooms/${App.room}/players`));
   const players = playersSnap.val() || {};
   
-  let nameExists = Object.values(players).some(p => p.name === finalName && p.uid !== uid);
-  if (nameExists) {
-    let count = 2;
-    while (Object.values(players).some(p => p.name === (inputName + " " + count))) {
-      count++;
+  if (!takeHost) {
+    let nameExists = Object.values(players).some(p => p.name === finalName && p.uid !== uid);
+    if (nameExists) {
+      let count = 2;
+      while (Object.values(players).some(p => p.name === (inputName + " " + count))) { count++; }
+      finalName = inputName + " " + count;
+      toast(`Name angepasst: ${finalName}`);
     }
-    finalName = inputName + " " + count;
-    toast(`Name angepasst: ${finalName}`);
   }
 
-  App.user = uid;
+  App.user = uid; 
   App.userName = finalName;
   App.team = team;
   localStorage.setItem("wedding_uid", uid);
 
-  if (!takeHost) {
+  if (takeHost) {
+    // ÜBERNAHME: Wir setzen die aktuelle UID als Host in der Meta-Node
+    await update(ref(db, `rooms/${App.room}/meta`), { 
+      host: uid,           // Die UID ist der Anker für die Berechtigung
+      hostName: finalName  // Nur für die Anzeige auf dem Beamer/Badge
+    });
+  } else {
     await update(ref(db, `rooms/${App.room}/players/${uid}`), {
       name: finalName,
       team: team,
@@ -158,11 +167,39 @@ async function start(takeHost, team) {
       score: players[uid]?.score || 0,
       joined: Date.now()
     });
-  } else {
-    await update(ref(db, `rooms/${App.room}/meta`), { host: finalName });
   }
 
   finishLogin();
+}
+
+function attachListeners() {
+  onValue(ref(db, `rooms/${App.room}/meta`), snap => {
+    const m = snap.val() || {};
+    App.meta = m;
+    
+    // WICHTIG: Vergleich der UID für Host-Rechte
+    App.isHost = (m.host === App.user); 
+
+    const teamEmoji = App.team === "braut" ? "👰" : App.team === "braeutigam" ? "🤵" : "👑";
+    const teamClass = App.team || "host";
+    
+    // Badge zeigt jetzt den Anzeigenamen (userName) statt der kryptischen UID
+    App.$("userBadge").innerHTML =
+      `<span class="badge ${teamClass}">${teamEmoji} ${App.userName}</span>` +
+      (App.isHost ? ' <span class="badge host"> (Host)</span>' : '');
+
+    App.$("hostStatus").innerHTML = `Aktueller Host: <b>${m.hostName || '-'}</b>`;
+    
+    // UI-Elemente für Host ein/ausblenden
+    const controls = App.$("hostControls");
+    if(controls) controls.classList.toggle("hidden", !App.isHost);
+    document.querySelectorAll(".hostOnly").forEach(el => el.classList.toggle("hidden", !App.isHost));
+    
+    if(m.braut) App.$("nameBraut").value = m.braut;
+    if(m.braeutigam) App.$("nameBraeutigam").value = m.braeutigam;
+  });
+  
+  // ... restliche onValue-Listener für Players/Teams
 }
 
 function finishLogin() {
@@ -175,34 +212,7 @@ function finishLogin() {
   switchTab("Game");
 }
 
-function attachListeners(){
-  onValue(ref(db, `rooms/${App.room}/meta`), snap=>{
-    const m = snap.val() || {};
-    App.meta = m;
-    App.isHost = (m.host === App.user);
-    const teamEmoji = App.team === "braut" ? "👰" : App.team === "braeutigam" ? "🤵" : "👑";
-    const teamClass = App.team || "host";
-    App.$("userBadge").innerHTML =
-      `<span class="badge ${teamClass}">${teamEmoji} ${App.user}</span>` +
-      (App.isHost ? ' <span class="badge host">(Host)</span>' : '');
-    App.$("hostStatus").innerHTML = `Aktueller Host: <b>${m.host || '-'}</b>`;
-    App.$("hostControls").classList.toggle("hidden", !App.isHost);
-    document.querySelectorAll(".hostOnly").forEach(el=>el.classList.toggle("hidden", !App.isHost));
-    if(m.braut) App.$("nameBraut").value = m.braut;
-    if(m.braeutigam) App.$("nameBraeutigam").value = m.braeutigam;
-    if(App.listeners.onMeta) App.listeners.onMeta();
-  });
-  onValue(ref(db, `rooms/${App.room}/players`), snap=>{
-    App.players = snap.val() || {};
-    renderTeamBoard();
-    renderLeaderboard();
-    if(App.listeners.onPlayers) App.listeners.onPlayers();
-  });
-  onValue(ref(db, `rooms/${App.room}/teams`), snap=>{
-    App.teams = snap.val() || { braut: 0, braeutigam: 0 };
-    renderTeamBoard();
-  });
-}
+
 
 function bindCoreUI(){
   document.querySelectorAll(".tab").forEach(t=>{
