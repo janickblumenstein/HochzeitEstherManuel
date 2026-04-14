@@ -1,5 +1,5 @@
 // === tapduel.js – Zwischenspiel: Tap-Duell Braut vs. Bräutigam ===
-const A = window.App, { db, ref, set, onValue, update, get, remove, $, toast } = A;
+const A = window.App, { db, ref, set, onValue, update, get, remove, $, toast, awardScore } = A;
 
 const DURATION_SEC = 15;
 let hostTimer = null; 

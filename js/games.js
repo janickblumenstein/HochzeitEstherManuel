@@ -5,22 +5,33 @@ const prevReady = A.listeners.onReady;
 A.listeners.onReady = ()=>{
   if(prevReady) prevReady();
   
+  // 1. Dieser Block bleibt unverändert (wichtig für die Host-Anzeige)
   onValue(ref(db, `rooms/${A.room}/quiz`), snap=>{
     A.state.quiz = snap.val();
     renderHostStatus();
   });
   
+  // 2. Das ist unser neuer, schlauer Block für das aktuelle Spiel
   onValue(ref(db, `rooms/${A.room}/game`), snap => {
     const prevGame = A.state.game;
     const newGame = snap.val();
     A.state.game = newGame;
     
-    // Auto-Sprung für Gäste & Input-Schutz
-    if (newGame && (!prevGame || prevGame.q !== newGame.q || prevGame.phase !== newGame.phase)) {
+    const isNewQuestionOrPhase = newGame && (!prevGame || prevGame.q !== newGame.q || prevGame.phase !== newGame.phase);
+    
+    // Hat der aktuelle Spieler gerade SEINE EIGENE Antwort abgeschickt?
+    const myPrevAns = (prevGame && prevGame.answers) ? prevGame.answers[A.user] : undefined;
+    const myNewAns = (newGame && newGame.answers) ? newGame.answers[A.user] : undefined;
+    const iJustAnswered = myPrevAns !== myNewAns;
+
+    if (isNewQuestionOrPhase) {
       if (!A.isHost && !A.isBeamer) A.switchTab("Game");
-      renderGame(); // Nur bei neuer Frage/Phase voll rendern
+      renderGame();
+    } else if (iJustAnswered) {
+      // Wenn ich selbst gedrückt habe, muss die Ansicht wechseln (zeigt "✅ Deine Antwort")
+      renderGame();
     } else {
-      // Wenn nur eine neue Antwort kam: Nur den Zähler updaten, nicht das ganze HTML!
+      // Wenn andere antworten, während ich noch überlege: Nur den Zähler updaten!
       updateLiveCounter(newGame);
     }
 
