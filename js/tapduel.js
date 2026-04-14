@@ -3,7 +3,7 @@ const A = window.App, { db, ref, set, onValue, update, get, remove, $, toast } =
 
 const DURATION_SEC = 15;
 let hostTimer = null; 
-let currentPhase = null; // Merkt sich die aktuelle Phase für die Spieler
+let currentPhase = null; 
 
 const prevReady = A.listeners.onReady;
 A.listeners.onReady = ()=>{
@@ -16,19 +16,16 @@ A.listeners.onReady = ()=>{
     if (d) {
       A.switchTab("Game"); 
     } else {
-      // 🚀 NEU: Automatischer Rücksprung, wenn das Spiel geschlossen wird!
       if (currentPhase !== null) {
         if (A.isHost) {
-          A.switchTab("Host");  // Host geht zurück ins Steuer-Panel
+          A.switchTab("Host");  
         } else if (!A.isBeamer) {
-          A.switchTab("Score"); // Gäste gehen auf die Rangliste
+          A.switchTab("Score"); 
         }
       }
-      currentPhase = null; // Reset
+      currentPhase = null; 
     }
 
-    // 🚀 DER 80-GÄSTE PERFORMANCE FIX 🚀
-    // Ignoriert Firebase-Updates während des Tippens, um Ruckeln zu verhindern
     if (!A.isHost && !A.isBeamer && d && d.phase === "running" && currentPhase === "running") {
       return; 
     }
@@ -95,14 +92,14 @@ async function finishTapDuel() {
   const players = A.players || {};
   const teamStats = { braut: { sum: 0, n: 0 }, braeutigam: { sum: 0, n: 0 } };
 
-  const tappers = []; // Sammelt alle, die getippt haben
+  const tappers = []; 
   
   for (const [uid, count] of Object.entries(taps)) {
     const p = players[uid];
     if (p && count > 0) {
       teamStats[p.team].sum += count;
       teamStats[p.team].n++;
-      tappers.push({ uid, name: p.name || uid.split('_')[0], count }); // Für die Rangliste speichern
+      tappers.push({ uid, name: p.name || uid.split('_')[0], count });
     }
   }
 
@@ -119,19 +116,18 @@ async function finishTapDuel() {
     await set(tRef, cur + 1);
   }
 
-  // 🚀 NEU: Top 3 Tapper belohnen (10, 5, 3 Punkte)
   tappers.sort((a, b) => b.count - a.count);
   const topTappers = tappers.slice(0, 3);
   const points = [10, 5, 3];
   
   for (let i = 0; i < topTappers.length; i++) {
     await awardScore(topTappers[i].uid, points[i]);
-    topTappers[i].pts = points[i]; // Punkte merken fürs UI
+    topTappers[i].pts = points[i]; 
   }
 
   await update(ref(db, `rooms/${A.room}/tapduel`), {
     phase: "done",
-    teamStats, winner, topTappers // Rangliste in die DB schreiben
+    teamStats, winner, topTappers 
   });
 }
 
@@ -154,7 +150,6 @@ function render(){
   const myTeam = A.team;
   const myCount = ((d.taps || {})[A.user]) || 0;
 
-  // ── COUNTDOWN ──
   if(d.phase === "countdown"){
     const left = Math.max(0, Math.ceil((d.startsAt - Date.now()) / 1000));
     body.innerHTML = `<div class="q-big">⚡ Tap-Duell!</div>
@@ -167,7 +162,6 @@ function render(){
     return;
   }
 
-  // ── RUNNING ──
   if(d.phase === "running"){
     const leftMs = Math.max(0, d.endsAt - Date.now());
     const leftSec = Math.ceil(leftMs / 1000);
@@ -245,7 +239,6 @@ function render(){
     return;
   }
 
-  // ── DONE ──
   if(d.phase === "done"){
     const ts = d.teamStats || { braut: {}, braeutigam: {} };
     const winner = d.winner;
@@ -266,6 +259,18 @@ function render(){
         <div class="mem">(${ts.braeutigam.sum||0} insgesamt, ${ts.braeutigam.n||0} Teilnehmer)</div>
       </div>
     </div>`;
+
+    if (d.topTappers && d.topTappers.length > 0) {
+      html += `<h3 style="text-align:center; margin-top:24px; color:var(--gold);">🔥 Die schnellsten Finger</h3>`;
+      d.topTappers.forEach((t, i) => {
+        const medal = ['🥇','🥈','🥉'][i];
+        const isMe = t.uid === A.user ? 'style="border:1px solid var(--gold); background:rgba(212,175,55,.15);"' : '';
+        html += `<div class="score-row" ${isMe}>
+          <span>${medal} ${t.name} <span class="sub">(${t.count} Taps)</span></span>
+          <strong style="color:var(--gold)">+${t.pts} Pkt</strong>
+        </div>`;
+      });
+    }
 
     if(wName){
       html += `<div class="flash gold" style="text-align:center;font-size:1.05rem;margin-top:14px">
