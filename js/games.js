@@ -656,6 +656,7 @@ function renderQuizSummary(){
     html += `<h3>Top-Tipper</h3>` + topPlayers.map(([n,d],i)=>{
       const medal = ['🥇','🥈','🥉'][i] || ((i+1)+'.');
       const tm = d.team === "braut" ? "👰 B" : "🤵 Br";
+      const displayName = d.name || n.split('_')[0]; // 🚀 NEU: Holt den sauberen Namen
       return `<div class="score-row"><span><span class="tm ${d.team}">${tm}</span>${medal} ${displayName}</span><strong>${d.score||0} Pkt</strong></div>`;
     }).join("");
   }

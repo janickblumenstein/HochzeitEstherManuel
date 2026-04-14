@@ -88,6 +88,7 @@ function renderQuizDone(view, nameB, nameBr){
     topPlayers.forEach(([n,d],i)=>{
       const medal = ['🥇','🥈','🥉'][i] || ((i+1)+'.');
       const tmColor = d.team === "braut" ? "var(--braut)" : "var(--braeutigam)";
+      const displayName = d.name || n.split('_')[0]; // 🚀 NEU: Holt den sauberen Namen
       html += `<div style="padding:12px 24px;margin:8px 0;background:rgba(255,255,255,.04);border-left:5px solid ${tmColor};border-radius:8px;display:flex;justify-content:space-between;font-size:1.6rem">
         <span>${medal} ${displayName}</span><strong style="color:var(--gold)">${d.score||0} Pkt</strong>
       </div>`;
