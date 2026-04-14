@@ -33,13 +33,13 @@ window.HochzeitContent = {
 
     // --- SCHÄTZFRAGEN: answer = Zahl ---
     estimate: [
-      { q: "Wie viele Jahre kennen sich Anna & Max schon?",       answer: 8,    unit: "Jahre" },
+      { q: "Wie viele Jahre kennen sich Esther & Manuel schon?",       answer: 8,    unit: "Jahre" },
       { q: "Wie viele Länder haben sie zusammen bereist?",        answer: 12,   unit: "Länder" },
       { q: "Wie viele Tage hat der längste Streit gedauert?",     answer: 3,    unit: "Tage" },
       { q: "In welchem Jahr war das erste Date?",                 answer: 2016, unit: "" },
       { q: "Wie viele Gäste sind heute da?",                      answer: 98,   unit: "Gäste" },
       { q: "Wie viele Minuten dauerte die Traurede?",             answer: 14,   unit: "Min" },
-      { q: "Wie viele Paar Schuhe besitzt Anna?",                 answer: 34,   unit: "Paar" },
+      { q: "Wie viele Paar Schuhe besitzt Esther?",                 answer: 34,   unit: "Paar" },
       { q: "Kosten der Flitterwochen in CHF?",                    answer: 6500, unit: "CHF" }
     ],
 
