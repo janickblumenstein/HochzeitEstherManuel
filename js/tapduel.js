@@ -2,16 +2,50 @@
 const A = window.App, { db, ref, set, onValue, update, get, remove, $, toast } = A;
 
 const DURATION_SEC = 15;
+let hostTimer = null; // Dieser Timer sorgt dafür, dass der Host die Runden automatisch weiterschaltet
 
 const prevReady = A.listeners.onReady;
 A.listeners.onReady = ()=>{
   if(prevReady) prevReady();
-  onValue(ref(db, `rooms/${A.room}/tapduel`), snap=>{
-    A.state.tapduel = snap.val();
+
+  // Nur noch EIN Listener, der alles sauber überwacht
+  onValue(ref(db, `rooms/${A.room}/tapduel`), snap => {
+    const d = snap.val();
+    A.state.tapduel = d;
+
+    // Wenn ein Tap-Duell existiert, zwinge alle in den Game-Tab
+    if (d) {
+      A.switchTab("Game"); 
+    }
+
     render();
     renderHostButton();
-    maybeStartAutoEnd();
+
+    // WICHTIG: Der Host steuert die Zeit vollautomatisch
+    if (A.isHost && d) {
+      if (hostTimer) clearTimeout(hostTimer); // Alte Timer löschen
+
+      if (d.phase === "countdown") {
+        // Wecker stellen, bis der Countdown abgelaufen ist
+        const left = Math.max(0, d.startsAt - Date.now());
+        hostTimer = setTimeout(() => {
+          if(A.state.tapduel?.phase === "countdown") {
+            update(ref(db, `rooms/${A.room}/tapduel`), { phase: "running" });
+          }
+        }, left);
+      }
+      else if (d.phase === "running") {
+        // Wecker stellen, bis die 15 Sekunden um sind
+        const left = Math.max(0, d.endsAt - Date.now());
+        hostTimer = setTimeout(() => {
+          if(A.state.tapduel?.phase === "running") {
+            finishTapDuel();
+          }
+        }, left);
+      }
+    }
   });
+
   const btn = $("btnStartTap");
   if(btn) btn.onclick = startTapDuel;
 };
@@ -19,15 +53,16 @@ A.listeners.onReady = ()=>{
 function renderHostButton(){
   const btn = $("btnStartTap");
   if(!btn) return;
-  btn.disabled = !!A.state.tapduel;
+  btn.disabled = !!A.state.tapduel; // Button sperren, wenn schon was läuft
 }
 
 async function startTapDuel(){
   if(!A.isHost) return;
-  // Konflikte vermeiden
+  // Konflikte mit einem evtl. laufenden normalen Quiz vermeiden
   await remove(ref(db, `rooms/${A.room}/quiz`));
   await remove(ref(db, `rooms/${A.room}/game`));
-  const startsAt = Date.now() + 3000;
+
+  const startsAt = Date.now() + 3000; // 3 Sekunden Countdown
   await set(ref(db, `rooms/${A.room}/tapduel`), {
     phase: "countdown",
     startsAt,
@@ -35,48 +70,7 @@ async function startTapDuel(){
     taps: {}
   });
   toast("⚡ Tap-Duell: Los in 3 Sek!");
-  A.switchTab("Game");
 }
-
-let autoEndScheduled = false;
-function maybeStartAutoEnd(){
-  const d = A.state.tapduel;
-  if(!d){ autoEndScheduled = false; return; }
-  if(d.phase === "done") return;
-
-  // Countdown → running switch clientseitig
-  if(d.phase === "countdown" && Date.now() >= d.startsAt){
-    if(A.isHost){
-      update(ref(db, `rooms/${A.room}/tapduel`), { phase: "running" });
-    }
-  }
-
-  // Auto-End wenn Zeit rum
-  if(d.phase === "running" && !autoEndScheduled && A.isHost){
-    const left = d.endsAt - Date.now();
-    if(left <= 0){
-      finishTapDuel();
-    } else {
-      autoEndScheduled = true;
-      setTimeout(()=>{
-        autoEndScheduled = false;
-        if(A.state.tapduel && A.state.tapduel.phase === "running") finishTapDuel();
-      }, left + 200);
-    }
-  }
-}
-
-// === tapduel.js – Korrigierte Logik ===
-
-// Überwachung der Phase für Auto-Umschaltung
-onValue(ref(db, `rooms/${A.room}/tapduel`), snap => {
-  const d = snap.val();
-  A.state.tapduel = d;
-  if (d) {
-    A.switchTab("Game"); // Erzwinge den Tab-Wechsel für alle
-  }
-  render();
-});
 
 async function finishTapDuel() {
   if (!A.isHost) return;
@@ -105,6 +99,7 @@ async function finishTapDuel() {
   const winner = teamStats.braut.avg > teamStats.braeutigam.avg ? "braut" :
                  teamStats.braeutigam.avg > teamStats.braut.avg ? "braeutigam" : null;
 
+  // Dem Gewinner-Team 1 Rundensieg gutschreiben
   if (winner) {
     const tRef = ref(db, `rooms/${A.room}/teams/${winner}`);
     const cur = (await get(tRef)).val() || 0;
@@ -118,7 +113,7 @@ async function finishTapDuel() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// PLAYER-SICHT
+// PLAYER-SICHT (Handy / Host-Kontrollansicht)
 // ═══════════════════════════════════════════════════════════
 function render(){
   const d = A.state.tapduel;
@@ -127,9 +122,12 @@ function render(){
     panel.classList.add("hidden");
     return;
   }
+  
+  // Sichtbarkeiten für Tap-Duell setzen
   panel.classList.remove("hidden");
   wait.classList.add("hidden");
   gamePanel.classList.add("hidden");
+
   const body = $("tapBody");
   const m = A.meta || {};
   const nameB = m.braut || "Braut";
@@ -144,8 +142,9 @@ function render(){
       <div class="sub" style="text-align:center">Team ${nameB} vs Team ${nameBr}<br>Gleich geht's los — tippt so schnell ihr könnt!</div>
       <div class="tap-count">${left}</div>
       <div class="sub" style="text-align:center">Team mit den meisten Taps pro Person gewinnt 1 Rundensieg</div>`;
-    // Re-render im Intervall
+
     A.clearTimers();
+    // Lässt die Zahl 3..2..1 auf dem Handy optisch runterzählen
     A.timers.push(setInterval(render, 250));
     return;
   }
@@ -164,7 +163,7 @@ function render(){
       <div class="timer-bar"><div class="fill" id="tapTimerBar" style="width:${pct}%"></div></div>`;
 
     if(isHost){
-      // Host: Live-Score
+      // Host: Sieht eine Live-Übersicht der Taps
       const taps = d.taps || {};
       const ts = { braut: { sum:0, n:0 }, braeutigam: { sum:0, n:0 } };
       for(const [p, c] of Object.entries(taps)){
@@ -187,14 +186,14 @@ function render(){
         </div>
       </div>`;
     } else {
-      // Spieler: Tap-Button groß
+      // Spieler: Riesiger Tap-Button
       html += `<div class="tap-count ${teamClass}">${myCount}</div>
         <button class="tap-btn btn-${teamClass}" id="tapBtn">TAP! ${teamLabel}</button>`;
     }
 
     body.innerHTML = html;
 
-    // Timer hochlaufen lassen
+    // Balken und Sekundenanzeige optisch flüssig runterlaufen lassen
     A.clearTimers();
     A.timers.push(setInterval(()=>{
       const l = Math.max(0, d.endsAt - Date.now());
@@ -204,10 +203,10 @@ function render(){
       if(tn) tn.innerText = s + "s";
       if(tb) tb.style.width = p + "%";
       if(l <= 0) A.clearTimers();
-      if(isHost && (A.timers.length % 4 === 0)) render(); // Live-Stats-Refresh
+      if(isHost && (A.timers.length % 4 === 0)) render(); // Live-Stats Refresh für den Host
     }, 250));
 
-    // Tap-Binding mit lokalem Counter → Batched Write
+    // Klick-Logik mit Drosselung (schont die Datenbank, wie besprochen)
     const btn = $("tapBtn");
     if(btn && !isHost){
       let localCount = myCount;
@@ -218,14 +217,15 @@ function render(){
         setTimeout(async()=>{
           await set(ref(db, `rooms/${A.room}/tapduel/taps/${A.user}`), localCount);
           pending = false;
-        }, 1000);
+        }, 1000); // 1 Sekunde Verzögerung
       };
+      
       btn.onclick = ()=>{
-        if(Date.now() >= d.endsAt) return;
+        if(Date.now() >= d.endsAt) return; // Nichts mehr zählen, wenn Zeit um
         localCount++;
         const disp = document.querySelector(".tap-count");
-        if(disp) disp.innerText = localCount;
-        flush();
+        if(disp) disp.innerText = localCount; // UI sofort updaten
+        flush(); // An Firebase senden
       };
     }
     return;
@@ -237,6 +237,7 @@ function render(){
     const winner = d.winner;
     const wName = winner === "braut" ? nameB : winner === "braeutigam" ? nameBr : null;
     let html = `<div class="q-big">⚡ Tap-Duell beendet!</div>`;
+    
     html += `<div class="team-board">
       <div class="team-card braut ${winner==="braut"?"team-winning":""}">
         <div class="nm">👰 ${nameB}</div>
@@ -251,6 +252,7 @@ function render(){
         <div class="mem">(${ts.braeutigam.sum||0} insgesamt, ${ts.braeutigam.n||0} Teilnehmer)</div>
       </div>
     </div>`;
+
     if(wName){
       html += `<div class="flash gold" style="text-align:center;font-size:1.05rem;margin-top:14px">
         🏆 Rundensieg für Team ${winner==="braut"?"👰":"🤵"} <b>${wName}</b>!
@@ -258,10 +260,13 @@ function render(){
     } else {
       html += `<div class="flash">Unentschieden – keiner kriegt den Punkt</div>`;
     }
+
     if(A.isHost){
-      html += `<button class="btn-ghost" id="tapClose">Schliessen</button>`;
+      html += `<button class="btn-ghost" id="tapClose" style="margin-top: 15px">Schliessen</button>`;
     }
+    
     body.innerHTML = html;
+    
     const cl = $("tapClose");
     if(cl) cl.onclick = ()=>remove(ref(db, `rooms/${A.room}/tapduel`));
     A.clearTimers();
