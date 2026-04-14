@@ -102,41 +102,77 @@ function initLogin(){
   }
 }
 
-async function start(takeHost, team){
-  const name = App.$("nameInp").value.trim();
-  if(!name) return alert("Bitte Namen eingeben!");
-  if(!takeHost && !team) return alert("Bitte Team wählen!");
-  App.user = name;
+// === core.js Ergänzungen/Änderungen ===
+
+// 1. Beim Laden der Seite: Auto-Login prüfen
+A.listeners.onReady = () => {
+  const savedUid = localStorage.getItem("wedding_uid");
+  if (savedUid) {
+    autoLogin(savedUid);
+  }
+};
+
+async function autoLogin(uid) {
+  const pSnap = await get(ref(db, `rooms/${App.room}/players/${uid}`));
+  if (pSnap.exists()) {
+    const data = pSnap.val();
+    App.user = uid;
+    App.userName = data.name;
+    App.team = data.team;
+    finishLogin();
+  }
+}
+
+async function start(takeHost, team) {
+  const inputName = App.$("nameInp").value.trim();
+  if (!inputName) return alert("Bitte Namen eingeben!");
+  if (!takeHost && !team) return alert("Bitte Team wählen!");
+
+  let finalName = inputName;
+  let uid = localStorage.getItem("wedding_uid") || (inputName + "_" + Math.random().toString(36).substr(2, 4));
+
+  // Namenskollision prüfen
+  const playersSnap = await get(ref(db, `rooms/${App.room}/players`));
+  const players = playersSnap.val() || {};
+  
+  let nameExists = Object.values(players).some(p => p.name === finalName && p.uid !== uid);
+  if (nameExists) {
+    let count = 2;
+    while (Object.values(players).some(p => p.name === (inputName + " " + count))) {
+      count++;
+    }
+    finalName = inputName + " " + count;
+    toast(`Name angepasst: ${finalName}`);
+  }
+
+  App.user = uid;
+  App.userName = finalName;
   App.team = team;
+  localStorage.setItem("wedding_uid", uid);
 
-  const metaSnap = await get(ref(db, `rooms/${App.room}/meta`));
-  if(!metaSnap.exists()){
-    const c = window.HochzeitContent || {};
-    await set(ref(db, `rooms/${App.room}/meta`), {
-      host: App.user, created: Date.now(),
-      braut: c.braut || "Braut", braeutigam: c.braeutigam || "Bräutigam"
-    });
-    await set(ref(db, `rooms/${App.room}/teams`), { braut: 0, braeutigam: 0 });
-  } else if(takeHost){
-    await update(ref(db, `rooms/${App.room}/meta`), { host: App.user });
-  }
-
-  // Host wird NICHT in players gespeichert (spielt nicht mit)
-  if(!takeHost){
-    const pRef = ref(db, `rooms/${App.room}/players/${App.user}`);
-    const existing = (await get(pRef)).val();
-    await set(pRef, {
+  if (!takeHost) {
+    await update(ref(db, `rooms/${App.room}/players/${uid}`), {
+      name: finalName,
       team: team,
-      score: existing ? (existing.score || 0) : 0,
-      joined: existing ? (existing.joined || Date.now()) : Date.now()
+      uid: uid,
+      score: players[uid]?.score || 0,
+      joined: Date.now()
     });
+  } else {
+    await update(ref(db, `rooms/${App.room}/meta`), { host: finalName });
   }
 
+  finishLogin();
+}
+
+function finishLogin() {
   App.$("login").classList.add("hidden");
   App.$("app").classList.remove("hidden");
   attachListeners();
   bindCoreUI();
-  if(App.listeners.onReady) App.listeners.onReady();
+  if (App.listeners.onReady) App.listeners.onReady();
+  // Sicherstellen, dass wir im "Spiel"-Tab landen
+  switchTab("Game");
 }
 
 function attachListeners(){

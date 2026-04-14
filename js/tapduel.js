@@ -66,28 +66,46 @@ function maybeStartAutoEnd(){
   }
 }
 
-async function finishTapDuel(){
-  if(!A.isHost) return;
-  const d = (await get(ref(db, `rooms/${A.room}/tapduel`))).val();
-  if(!d || d.phase !== "running") return;
+// === tapduel.js – Korrigierte Logik ===
 
-  const players = A.players || {};
+// Überwachung der Phase für Auto-Umschaltung
+onValue(ref(db, `rooms/${A.room}/tapduel`), snap => {
+  const d = snap.val();
+  A.state.tapduel = d;
+  if (d) {
+    A.switchTab("Game"); // Erzwinge den Tab-Wechsel für alle
+  }
+  render();
+});
+
+async function finishTapDuel() {
+  if (!A.isHost) return;
+  const snap = await get(ref(db, `rooms/${A.room}/tapduel`));
+  const d = snap.val();
+  if (!d || d.phase !== "running") return;
+
   const taps = d.taps || {};
+  const players = A.players || {};
   const teamStats = { braut: { sum: 0, n: 0 }, braeutigam: { sum: 0, n: 0 } };
 
-  for(const [p, cnt] of Object.entries(taps)){
-    const t = (players[p] || {}).team;
-    if(!t || !teamStats[t]) continue;
-    teamStats[t].sum += cnt;
-    teamStats[t].n++;
+  // WICHTIG: Nur Leute zählen, die wirklich getippt haben (>0)
+  for (const [uid, count] of Object.entries(taps)) {
+    const p = players[uid];
+    if (p && count > 0) {
+      teamStats[p.team].sum += count;
+      teamStats[p.team].n++;
+    }
   }
-  for(const k of ["braut","braeutigam"]){
+
+  // Durchschnitt berechnen
+  for (const k of ["braut", "braeutigam"]) {
     teamStats[k].avg = teamStats[k].n > 0 ? teamStats[k].sum / teamStats[k].n : 0;
   }
+
   const winner = teamStats.braut.avg > teamStats.braeutigam.avg ? "braut" :
                  teamStats.braeutigam.avg > teamStats.braut.avg ? "braeutigam" : null;
 
-  if(winner){
+  if (winner) {
     const tRef = ref(db, `rooms/${A.room}/teams/${winner}`);
     const cur = (await get(tRef)).val() || 0;
     await set(tRef, cur + 1);
@@ -200,7 +218,7 @@ function render(){
         setTimeout(async()=>{
           await set(ref(db, `rooms/${A.room}/tapduel/taps/${A.user}`), localCount);
           pending = false;
-        }, 200);
+        }, 1000);
       };
       btn.onclick = ()=>{
         if(Date.now() >= d.endsAt) return;
