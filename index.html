@@ -8,7 +8,7 @@
 :root{
   --gold:#d4af37;--rose:#e8a4b8;--braut:#e8a4b8;--braeutigam:#6ba3c7;
   --bg:#1a1520;--card:#2a2230;--card2:#352b3e;--muted:#9a8fa5;
-  --border:#3e3448;--green:#4ecf6a;--red:#e85a5a;--ink:#f5eef8;
+  --border:#3e3448;--green:#4ecf6a;--red:#e85a5a;--ink:#f5eef8;--orange:#e8a555;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);font-family:-apple-system,system-ui,sans-serif;min-height:100vh;overscroll-behavior:none}
@@ -36,6 +36,7 @@ button:disabled{opacity:.35;cursor:not-allowed}
 .btn-ghost{background:transparent;border:1px solid var(--border);color:var(--ink)}
 .btn-green{background:var(--green);color:#0a1a0c}
 .btn-red{background:var(--red);color:#fff}
+.btn-orange{background:var(--orange);color:#2a1a10}
 .btn-sm{padding:9px 13px;font-size:.85rem;width:auto;margin:3px}
 .row{display:flex;gap:8px}.row>*{flex:1}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
@@ -75,6 +76,7 @@ button:disabled{opacity:.35;cursor:not-allowed}
 .team-card.braeutigam{background:rgba(107,163,199,.12);border-color:var(--braeutigam)}
 .team-card .nm{font-size:.8rem;opacity:.8;margin-bottom:4px;text-transform:uppercase;letter-spacing:1px}
 .team-card .pts{font-size:2.4rem;font-weight:900;letter-spacing:1px}
+.team-card .pts-sub{font-size:.7rem;opacity:.6;margin-top:2px}
 .team-card.braut .pts{color:var(--braut)}
 .team-card.braeutigam .pts{color:var(--braeutigam)}
 .team-card .mem{font-size:.75rem;opacity:.6;margin-top:4px}
@@ -89,6 +91,7 @@ button:disabled{opacity:.35;cursor:not-allowed}
 
 /* === GAME DISPLAY === */
 .q-big{font-size:1.3rem;color:var(--gold);text-align:center;margin:14px 0;font-weight:600;line-height:1.35}
+.q-num{text-align:center;font-size:.8rem;opacity:.6;letter-spacing:2px;text-transform:uppercase;margin-bottom:4px}
 .photo-box{width:100%;max-width:400px;margin:10px auto;border-radius:14px;overflow:hidden;background:var(--card2);aspect-ratio:1;display:flex;align-items:center;justify-content:center}
 .photo-box img{width:100%;height:100%;object-fit:cover}
 .photo-box .ph{font-size:3rem;opacity:.3}
@@ -96,11 +99,27 @@ button:disabled{opacity:.35;cursor:not-allowed}
 .flash.warn{background:rgba(232,90,90,.15);border-left-color:var(--red)}
 .flash.gold{background:rgba(212,175,55,.15);border-left-color:var(--gold)}
 .flash.rose{background:rgba(232,164,184,.15);border-left-color:var(--rose)}
-.timer{font-size:1.8rem;color:var(--gold);text-align:center;font-weight:bold;margin:8px 0}
+
+/* === TIMER === */
+.timer-bar{height:8px;background:var(--card2);border-radius:4px;overflow:hidden;margin:10px 0}
+.timer-bar .fill{height:100%;background:var(--gold);transition:width 1s linear, background .3s}
+.timer-bar .fill.warn{background:var(--orange)}
+.timer-bar .fill.crit{background:var(--red)}
+.timer-num{font-size:1.4rem;color:var(--gold);text-align:center;font-weight:bold;margin:4px 0}
+
+/* === RESULT BARS === */
 .result-bar{height:28px;border-radius:6px;overflow:hidden;display:flex;margin:10px 0;background:var(--card2);position:relative}
 .result-bar .rb{display:flex;align-items:center;justify-content:center;color:#fff;font-weight:bold;font-size:.85rem;transition:width .6s ease-out}
 .result-bar .rb.braut{background:var(--braut);color:#2a1a20}
 .result-bar .rb.braeutigam{background:var(--braeutigam)}
+
+/* === TAP DUEL === */
+.tap-btn{width:100%;padding:50px 20px;font-size:2rem;border-radius:20px;margin:15px 0;box-shadow:0 4px 12px rgba(0,0,0,.3);transition:transform .05s}
+.tap-btn:active{transform:scale(.95)}
+.tap-count{font-size:5rem;font-weight:900;text-align:center;margin:10px 0}
+.tap-count.braut{color:var(--braut)}
+.tap-count.braeutigam{color:var(--braeutigam)}
+
 .toast{position:fixed;bottom:30px;left:50%;transform:translateX(-50%);background:var(--gold);color:#000;padding:12px 20px;border-radius:25px;font-weight:bold;z-index:200;animation:toastIn .3s;max-width:90%;text-align:center}
 @keyframes toastIn{from{transform:translateX(-50%) translateY(20px);opacity:0}to{transform:translateX(-50%) translateY(0);opacity:1}}
 
@@ -120,14 +139,21 @@ body.beamer-mode .beamer-view .photo-box{max-width:500px;aspect-ratio:1}
 body.beamer-mode .beamer-view .photo-box img{object-fit:cover}
 body.beamer-mode .beamer-view .sub-big{font-size:1.5rem;opacity:.7;margin:10px 0}
 body.beamer-mode .beamer-view .big-counter{font-size:5rem;font-weight:900;color:var(--gold)}
+body.beamer-mode .beamer-view .big-timer{font-size:7rem;font-weight:900;color:var(--gold);line-height:1}
+body.beamer-mode .beamer-view .big-timer.warn{color:var(--orange)}
+body.beamer-mode .beamer-view .big-timer.crit{color:var(--red);animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.1)}}
+body.beamer-mode .beamer-view .qprog{font-size:1.2rem;opacity:.5;letter-spacing:3px;text-transform:uppercase;margin-bottom:20px}
 body.beamer-mode .beamer-view .team-score-big{display:grid;grid-template-columns:1fr 1fr;gap:30px;margin-top:40px;max-width:1000px;width:100%;align-self:center}
 body.beamer-mode .beamer-view .team-score-big .tcard{padding:40px;border-radius:20px;border:3px solid var(--border)}
 body.beamer-mode .beamer-view .team-score-big .tcard.braut{background:rgba(232,164,184,.1);border-color:var(--braut)}
 body.beamer-mode .beamer-view .team-score-big .tcard.braeutigam{background:rgba(107,163,199,.1);border-color:var(--braeutigam)}
 body.beamer-mode .beamer-view .team-score-big .tcard .label{font-size:1.8rem;text-transform:uppercase;letter-spacing:3px;opacity:.8}
 body.beamer-mode .beamer-view .team-score-big .tcard .value{font-size:7rem;font-weight:900;margin:10px 0}
+body.beamer-mode .beamer-view .team-score-big .tcard .sublabel{font-size:1rem;opacity:.5}
 body.beamer-mode .beamer-view .team-score-big .tcard.braut .value{color:var(--braut)}
 body.beamer-mode .beamer-view .team-score-big .tcard.braeutigam .value{color:var(--braeutigam)}
+body.beamer-mode .beamer-view .tap-live{font-size:9rem;font-weight:900}
 </style>
 </head>
 <body>
@@ -141,14 +167,14 @@ body.beamer-mode .beamer-view .team-score-big .tcard.braeutigam .value{color:var
     <h2 style="margin:6px 0">Herzlich willkommen!</h2>
     <div class="sub">Gib deinen Namen ein und wähle dein Team</div>
     <input id="nameInp" placeholder="Dein Name" maxlength="24" autocomplete="off">
-    <div class="team-pick">
+    <div class="team-pick" id="teamPick">
       <button class="team-btn" data-team="braut"><span class="ic">👰</span>Team Braut</button>
       <button class="team-btn" data-team="braeutigam"><span class="ic">🤵</span>Team Bräutigam</button>
     </div>
     <button id="btnJoin">Mitmachen</button>
-    <button id="btnHost" class="btn-ghost hidden" style="margin-top:8px">Als Host starten</button>
+    <button id="btnHost" class="btn-ghost hidden" style="margin-top:8px">👑 Als Host starten (kein Team)</button>
   </div>
-  <div class="host-hint">v1 · 3× Logo tippen für Host-Modus</div>
+  <div class="host-hint">v2 · 3× Logo tippen für Host-Modus</div>
 </div>
 
 <!-- ===== APP (player view) ===== -->
@@ -161,7 +187,7 @@ body.beamer-mode .beamer-view .team-score-big .tcard.braeutigam .value{color:var
   <div class="tabbar">
     <button class="tab active" data-tab="Game"><span class="ic">🎮</span>Spiel</button>
     <button class="tab" data-tab="Score"><span class="ic">🏆</span>Rangliste</button>
-    <button class="tab" data-tab="Host"><span class="ic">👑</span>Host</button>
+    <button class="tab hostOnly hidden" data-tab="Host"><span class="ic">👑</span>Host</button>
   </div>
 
   <!-- GAME TAB -->
@@ -169,11 +195,14 @@ body.beamer-mode .beamer-view .team-score-big .tcard.braeutigam .value{color:var
     <div id="gamePanel" class="card hidden">
       <div id="gameBody"></div>
     </div>
+    <div id="tapPanel" class="card hidden">
+      <div id="tapBody"></div>
+    </div>
     <div id="gameWait" class="card">
       <div style="text-align:center;padding:20px">
         <div style="font-size:3rem">⏳</div>
-        <h2 style="margin-top:10px">Warten auf nächste Runde</h2>
-        <div class="sub">Der Host startet gleich ein Spiel...</div>
+        <h2 style="margin-top:10px">Warten auf das nächste Spiel</h2>
+        <div class="sub">Der Host startet gleich...</div>
       </div>
     </div>
   </div>
@@ -195,36 +224,41 @@ body.beamer-mode .beamer-view .team-score-big .tcard.braeutigam .value{color:var
     <div class="card">
       <h2>👑 Host-Panel</h2>
       <div id="hostStatus" class="sub"></div>
-      <button id="btnTakeHost" class="btn-ghost">Host übernehmen</button>
     </div>
     <div id="hostControls" class="hidden">
+
       <div class="card">
-        <h3>🎯 Neues Spiel starten</h3>
-        <select id="gameTypeSel">
-          <option value="who">Wer von beiden? (Braut oder Bräutigam)</option>
-          <option value="estimate">Schätzfrage (Zahl erraten)</option>
-          <option value="photo">Kindheitsfoto-Rätsel</option>
-          <option value="prognose">Ehe-Prognose (ohne richtige Antwort)</option>
-          <option value="family">Familie / Custom Optionen</option>
-        </select>
-        <select id="presetSel"><option value="">-- Vorbereitete Frage wählen --</option></select>
-        <button id="btnLoadPreset" class="btn-ghost btn-sm" style="width:auto">Frage laden</button>
-        <hr>
-        <input id="qText" placeholder="Frage" maxlength="200">
-        <div id="qExtra"></div>
-        <button id="btnStartGame" class="btn-green">🚀 Runde starten</button>
+        <h3>🎯 Quiz-Set starten</h3>
+        <select id="setSel"></select>
+        <div class="row">
+          <input id="timerOverride" type="number" placeholder="Timer (Sek)" style="max-width:140px">
+          <button id="btnStartSet" class="btn-green">🚀 Set starten</button>
+        </div>
+        <div class="sub">Leer lassen für Standard-Timer des Sets</div>
       </div>
+
       <div class="card">
-        <h3>🔧 Aktuelle Runde</h3>
-        <button id="btnReveal" class="btn-green">✓ Auflösung zeigen</button>
-        <button id="btnEndGame" class="btn-red">✗ Runde abbrechen</button>
+        <h3>🔥 Zwischenspiel</h3>
+        <button id="btnStartTap" class="btn-orange">⚡ Tap-Duell starten (15 Sek)</button>
+        <div class="sub">Team mit den meisten Taps pro Person gewinnt 1 Rundensieg.</div>
       </div>
+
+      <div class="card">
+        <h3>🔧 Laufendes Spiel</h3>
+        <div id="runningStatus" class="sub">Kein Spiel aktiv</div>
+        <button id="btnReveal" class="btn-green" disabled>✓ Jetzt auflösen</button>
+        <button id="btnNextQ" class="btn-gold hidden">➡️ Nächste Frage</button>
+        <button id="btnAddTime" class="btn-ghost btn-sm" style="width:auto" disabled>+10 Sek</button>
+        <button id="btnEndGame" class="btn-red">✗ Abbrechen</button>
+      </div>
+
       <div class="card">
         <h3>🖥️ Beamer</h3>
-        <div class="sub">Öffne am Beamer-Laptop diese URL in einem neuen Tab:</div>
+        <div class="sub">Am Beamer-Laptop öffnen:</div>
         <div id="beamerUrl" style="background:var(--card2);padding:10px;border-radius:8px;font-family:monospace;font-size:.8rem;word-break:break-all;margin:6px 0"></div>
         <button id="btnCopyUrl" class="btn-ghost btn-sm" style="width:auto">URL kopieren</button>
       </div>
+
       <div class="card">
         <h3>⚙️ Einstellungen</h3>
         <div class="row">
@@ -240,7 +274,7 @@ body.beamer-mode .beamer-view .team-score-big .tcard.braeutigam .value{color:var
   </div>
 </div>
 
-<!-- ===== BEAMER VIEW (separate URL with ?beamer=1) ===== -->
+<!-- ===== BEAMER VIEW ===== -->
 <div id="beamer" class="wrap hidden">
   <div class="beamer-view" id="beamerView"></div>
 </div>
@@ -250,6 +284,7 @@ body.beamer-mode .beamer-view .team-score-big .tcard.braeutigam .value{color:var
 <script type="module" src="./js/content.js"></script>
 <script type="module" src="./js/core.js"></script>
 <script type="module" src="./js/games.js"></script>
+<script type="module" src="./js/tapduel.js"></script>
 <script type="module" src="./js/beamer.js"></script>
 </body>
 </html>

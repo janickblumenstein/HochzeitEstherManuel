@@ -1,6 +1,6 @@
-# ♥ Hochzeits-Rate-Spiel
+# ♥ Hochzeits-Rate-Spiel v2
 
-Eine einfache Web-App für Hochzeitsgesellschaften: Gäste tippen Fragen über das Brautpaar auf dem Handy, der Host steuert das Spiel spontan, und ein Beamer zeigt Fragen & Ergebnisse groß.
+Einfache Web-App für Hochzeitsgesellschaften: Host steuert spontan Quiz-Sets oder ein Tap-Duell, Gäste tippen am Handy mit, der Beamer zeigt Fragen & Ergebnisse groß.
 
 ## 📁 Projekt-Struktur
 
@@ -9,32 +9,32 @@ hochzeit/
 ├── index.html
 ├── README.md
 └── js/
-    ├── content.js    ← HIER Fragen, Fotos & Namen anpassen
-    ├── core.js       ← Firebase-Config, Login, Rangliste
-    ├── games.js      ← Spiel-Logik (5 Modi)
+    ├── content.js    ← HIER Fragen, Fotos & Sets anpassen
+    ├── core.js       ← Firebase-Config, Login, Team-Board
+    ├── games.js      ← Quiz-Runner mit Timer und Team-Fairness
+    ├── tapduel.js    ← Tap-Duell (15 Sek Zwischenspiel)
     └── beamer.js     ← Beamer-Großansicht
 ```
 
+## ✨ Was ist neu gegenüber v1
+
+- **Quiz-Sets statt Einzelfragen**: Host wählt z.B. "Bunter Mix (10 Fragen)" → läuft automatisch durch
+- **Timer pro Frage** (default 20s, pro Set konfigurierbar, Host kann +10s geben)
+- **Faire Team-Wertung**: Team mit der höheren Trefferquote (%) gewinnt 1 Rundensieg — Teamgröße egal
+- **Host spielt nicht mit**: Als Host eingeloggt → keine Antwort-Buttons, nur Steuerung und Live-Status
+- **Tap-Duell als Zwischenspiel**: 15 Sek Tippen, Team mit höchstem Durchschnitt pro Person gewinnt
+- **Foto-Sets**: Einmal in `content.js` vorbereiten, dann mit einem Klick starten
+- **Beamer-Timer**: Countdown groß am Beamer, wird rot in den letzten 5 Sek
+
 ## 🚀 Setup in 3 Schritten
 
-### 1. Firebase einrichten (ca. 5 Min, kostenlos)
+### 1. Firebase einrichten (~5 Min, kostenlos)
 
-1. Auf https://console.firebase.google.com → **"Add project"** → Name eingeben (z.B. `hochzeit-spiel`)
-2. Im Projekt: **Build → Realtime Database → Create Database** → Region `europe-west1` wählen → **Start in test mode**
-3. Links oben **⚙️ Project Settings → General** runterscrollen zu "Your apps" → **Web-App hinzufügen** (`</>`-Symbol) → App registrieren
-4. Die `firebaseConfig` kopieren und in `js/core.js` einfügen (Zeilen 6–11):
-
-```javascript
-const firebaseConfig = {
-  apiKey: "AIzaSy...",
-  authDomain: "hochzeit-spiel.firebaseapp.com",
-  databaseURL: "https://hochzeit-spiel-default-rtdb.europe-west1.firebasedatabase.app/",
-  projectId: "hochzeit-spiel"
-};
-```
-
-5. In der Realtime Database → **Rules-Tab** → folgende Regel einfügen (erlaubt Zugriff bis Ende 2027):
-
+1. https://console.firebase.google.com → **"Add project"**
+2. **Build → Realtime Database → Create** → Region `europe-west1`
+3. **⚙️ Project Settings → General** → Web-App registrieren (`</>`)
+4. Die `firebaseConfig` in `js/core.js` Zeilen 6–11 einsetzen
+5. Database **Rules-Tab**:
 ```json
 {
   "rules": {
@@ -44,72 +44,88 @@ const firebaseConfig = {
 }
 ```
 
-### 2. Fragen, Fotos & Namen anpassen
+### 2. Fragen & Sets anpassen
 
-Öffne `js/content.js` und passe an:
+`js/content.js` öffnen und anpassen:
 
-- **`braut` / `braeutigam`**: Die echten Namen
-- **`who`, `estimate`, `photos`, `prognose`, `family`**: Fragen zum Paar schreiben
+- **`braut` / `braeutigam`**: Echte Namen
+- **`questions.who/estimate/photos/prognose/family`**: Deine eigenen Fragen
+- **`sets`**: Welche Quiz-Sets der Host starten kann
 
-**Fotos**: Am einfachsten kostenlos auf https://imgur.com hochladen → Rechtsklick aufs Bild → "Bildadresse kopieren" → als `photoUrl` einfügen. Quadratische Fotos sehen am besten aus.
+Quiz-Sets sehen so aus:
+```javascript
+{ id: "whoRound", label: "👫 Wer-von-beiden (5 Fragen)", pick: { who: 5 }, timer: 20 }
+```
+
+`pick`-Optionen:
+- `{ who: 3 }` → 3 zufällige Wer-Fragen
+- `{ photos: "all" }` → alle Fotos der Reihe nach
+- `{ random: 10 }` → 10 zufällige aus allen Kategorien gemischt
+- Mehrere kombinierbar: `{ who: 2, photos: 2, estimate: 1 }`
+
+**Fotos**: Auf https://imgur.com hochladen → Rechtsklick → "Bildadresse kopieren" → als `photoUrl` einfügen.
 
 ### 3. Hosten
 
-**Option A – GitHub Pages (empfohlen, gratis)**
+**Empfohlen: Netlify Drop** (https://netlify.com/drop)
+- Ordner einfach in den Browser ziehen → läuft sofort mit eigener URL
 
-1. GitHub-Repo erstellen, Dateien hochladen (gleiche Ordnerstruktur)
-2. **Settings → Pages → Source: main, folder: `/ (root)`**
-3. Nach ~30s läuft die App unter `https://<dein-user>.github.io/<repo>/`
-4. URL im Hochzeitssaal per QR-Code an die Gäste verteilen
-
-**Option B – Netlify (Drag & Drop)**
-
-Ordner auf https://netlify.com droppen – fertig mit eigener URL.
-
-**Option C – Lokal (Testing)**
-
-```
-cd hochzeit
-python3 -m http.server 8000
-```
-→ im Browser `http://localhost:8000/` öffnen
+Alternativ: **Vercel** oder **GitHub Pages**.
 
 ## 🎮 Ablauf am Hochzeitstag
 
-1. **Host öffnet die App** auf dem Handy, tippt 3× auf das "♥ HOCHZEIT ♥"-Logo → "Als Host starten"-Button erscheint → Name eingeben + Team wählen + "Als Host starten"
-2. **Beamer-Laptop**: URL mit `?beamer=1` am Ende öffnen (z.B. `https://dein-user.github.io/hochzeit/?beamer=1`) → Zeigt automatisch im Vollbild den aktuellen Spielstand, die Frage oder das Ergebnis
-3. **Gäste** scannen den QR-Code zur normalen URL → tippen Name ein → wählen Team Braut oder Bräutigam → fertig
-4. **Host-Panel** (Tab 👑 Host): Spielart wählen, vorbereitete Frage laden ODER spontan tippen, dann "Runde starten" → Gäste beantworten am Handy → Host drückt "Auflösung zeigen" → Punkte werden automatisch vergeben → Nächste Runde starten
+**Host (z.B. Trauzeuge)**:
+1. 3× auf "♥ HOCHZEIT ♥"-Logo tippen → Host-Button erscheint
+2. Name eingeben → "Als Host starten" (kein Team nötig, Host spielt nicht mit)
+3. Host-Tab öffnen → Quiz-Set wählen → "Set starten"
 
-## 🎯 Die 5 Spielmodi
+**Beamer-Laptop**:
+- Gleiche URL mit `?beamer=1` am Ende öffnen → Vollbild, zeigt alles automatisch
 
-| Modus | Was passiert | Punkte |
-|---|---|---|
-| **Wer von beiden?** | Frage + 2 Buttons (Braut/Bräutigam) | +1 pro richtiger Antwort → fürs jeweilige Team |
-| **Schätzfrage** | Zahl eingeben (z.B. "Wie viele Länder bereist?") | Top 3 näher-dran: +3 / +2 / +1 |
-| **Kindheitsfoto** | Foto wird groß gezeigt, wer ist das? | +1 pro richtiger Antwort |
-| **Ehe-Prognose** | Lustige Frage ohne richtige Antwort | Mehrheits-Team bekommt +1 je Tipp |
-| **Familie** | Frei wählbare 2 Optionen (z.B. Vater A / Vater B) | +1 pro richtiger Antwort |
+**Gäste**:
+- QR-Code scannen → Name + Team wählen → mitmachen
 
-Jede Runde dauert typisch 2–3 Min. Zwischen Runden ist Pause – der Host kann jederzeit spontan entscheiden, ob's weitergeht oder gegessen/geredet wird.
+**Während des Quiz**:
+- Zeitlimit läuft automatisch ab → Host kann früher auflösen oder +10 Sek geben
+- Nach Auflösung: "Nächste Frage"-Button (oder Quiz beenden am Ende)
+- Zwischendurch: "⚡ Tap-Duell starten" für 15 Sek Auflockerung
 
-## 🏆 Punkte-System
+## 🎯 Die 5 Fragetypen
 
-- **Einzel-Score**: Pro richtiger Antwort kriegt der Gast Punkte auf seinen persönlichen Stand
-- **Team-Score**: Gleichzeitig gehen die Punkte auch ans Team (Braut/Bräutigam) — wird im Beamer groß angezeigt
-- **Gewinner-Team** bekommt ein Feature-Glow auf dem Leaderboard
+| Typ | Mechanik | Einzel-Punkte | Team-Rundensieg |
+|---|---|---|---|
+| **Wer von beiden?** | Klick auf Braut/Bräutigam | +1 pro richtig | Team mit höherer Trefferquote |
+| **Schätzfrage** | Zahl eingeben | +3/+2/+1 für Top 3 | Team des Siegers (Top 1) |
+| **Kindheitsfoto** | Foto wird groß gezeigt | +1 pro richtig | Team mit höherer Trefferquote |
+| **Familie** | 2 custom Optionen | +1 pro richtig | Team mit höherer Trefferquote |
+| **Ehe-Prognose** | Kein "richtig" | keine | Mehrheits-Team gewinnt Runde |
+
+## ⚡ Tap-Duell (Zwischenspiel, 15 Sek)
+
+- Jeder tippt so oft wie möglich auf den Team-Button
+- **Gewinner** = Team mit dem höchsten **Durchschnitt pro Person** (nicht der Summe!) → Teamgröße egal
+- Gewinner-Team bekommt 1 Rundensieg
+- Live-Anzeige am Beamer
+
+## 🏆 Scoring-System
+
+- **Rundensiege** (Team-Stand): Hauptmetrik, 1 pro gewonnene Runde. Fair auch bei ungleicher Teamgröße.
+- **Einzelpunkte** (persönliche Rangliste): Pro richtige Antwort, nicht für Team-Wertung.
+
+Am Ende des Abends kürt ihr:
+- **Team-Sieger** (meiste Rundensiege)
+- **Top-Tipper** (Einzel-Rangliste)
 
 ## 🔧 Tipps für den Abend
 
-- **Reihenfolge**: Starte mit 2–3 einfachen "Wer von beiden?"-Fragen zum Warmwerden, dann ein Foto-Rätsel als Highlight, eine Schätzfrage, und zum Schluss eine Prognose für die Lacher
-- **Timing**: 8–12 Runden über den Abend verteilt, nicht am Stück
-- **Beamer-Fallback**: Falls kein Beamer da ist — alles läuft genauso auf den Handys, kein Problem
-- **Host-Wechsel**: Jeder kann im Host-Tab "Host übernehmen" drücken, falls der ursprüngliche Host keine Lust mehr hat
+- **Dramaturgie**: Warmmacher → Foto-Quiz → Schätz-Runde → Tap-Duell als Pause → Familien-Quiz → Prognose → Grosses Finale (Mixed)
+- **Zeit**: Ein Set dauert 3–5 Min je nach Anzahl Fragen. Verteile 2–4 Sets über den Abend.
+- **Beamer-Fallback**: Funktioniert auch komplett ohne Beamer, nur aufs Handy.
 
-## ⚠️ Bekannte Limitationen
+## ⚠️ Known Limits
 
-- Keine Foto-Uploads direkt in der App (man braucht eine URL — imgur etc.)
-- Nur 1 Raum (`HOCHZEIT`) — reicht für ein Event, bei Paralleleinsätzen in `core.js` `ROOM` anpassen
-- Kein User-Authentication — wer den Namen kennt, kann als der Name einloggen (für eine Hochzeit unkritisch)
+- Keine Foto-Uploads in der App (imgur-URLs nötig)
+- Ein Raum (`HOCHZEIT`) — für ein Event reicht das
+- Kein Auth — wer den Namen kennt kann als der Name einloggen (unkritisch für Hochzeit)
 
 Viel Spaß! 💍
