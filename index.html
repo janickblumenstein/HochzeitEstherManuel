@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Hochzeit – Rate-Abend</title>
+<style>
+:root{
+  --gold:#d4af37;--rose:#e8a4b8;--braut:#e8a4b8;--braeutigam:#6ba3c7;
+  --bg:#1a1520;--card:#2a2230;--card2:#352b3e;--muted:#9a8fa5;
+  --border:#3e3448;--green:#4ecf6a;--red:#e85a5a;--ink:#f5eef8;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);font-family:-apple-system,system-ui,sans-serif;min-height:100vh;overscroll-behavior:none}
+body{padding-bottom:20px}
+.wrap{max-width:520px;margin:auto;padding:12px}
+.topbar{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:var(--card);border-radius:14px;margin-bottom:12px;position:sticky;top:10px;z-index:50;border:1px solid var(--border)}
+.topbar h1{margin:0;font-size:1rem;color:var(--gold);font-weight:600;letter-spacing:1px}
+.badge{font-size:.75rem;opacity:.8}
+.badge.host{color:var(--gold);font-weight:bold;opacity:1}
+.badge.braut{color:var(--braut)}
+.badge.braeutigam{color:var(--braeutigam)}
+.card{background:var(--card);padding:18px;border-radius:16px;margin-bottom:12px;box-shadow:0 2px 14px rgba(0,0,0,.3);border:1px solid var(--border)}
+h2{margin:0 0 14px;font-size:1.15rem;color:var(--gold)}
+h3{margin:16px 0 10px;font-size:1rem;color:var(--rose)}
+.sub{opacity:.65;font-size:.85rem;margin:6px 0}
+hr{border:none;border-top:1px dashed var(--border);margin:16px 0}
+input,select,textarea,button{width:100%;padding:14px;margin:6px 0;border-radius:12px;border:none;font-size:16px;font-family:inherit}
+select{background:#fff;color:#000;height:50px}
+input,textarea{background:var(--card2);color:var(--ink);border:1px solid var(--border)}
+button{background:var(--gold);color:#000;font-weight:bold;cursor:pointer;transition:transform .1s}
+button:active{transform:scale(.97)}
+button:disabled{opacity:.35;cursor:not-allowed}
+.btn-braut{background:var(--braut);color:#2a1a20}
+.btn-braeutigam{background:var(--braeutigam);color:#0f2030}
+.btn-ghost{background:transparent;border:1px solid var(--border);color:var(--ink)}
+.btn-green{background:var(--green);color:#0a1a0c}
+.btn-red{background:var(--red);color:#fff}
+.btn-sm{padding:9px 13px;font-size:.85rem;width:auto;margin:3px}
+.row{display:flex;gap:8px}.row>*{flex:1}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.hidden{display:none!important}
+
+/* === LOGIN === */
+#login{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  background:radial-gradient(ellipse at top,#3d2133,var(--bg) 60%);
+  padding:20px;text-align:center;position:relative;overflow:hidden}
+#login::before{content:"";position:absolute;top:-50%;left:-50%;width:200%;height:200%;
+  background:radial-gradient(circle,rgba(232,164,184,.06) 0%,transparent 40%);
+  animation:rotate 40s linear infinite;pointer-events:none}
+@keyframes rotate{to{transform:rotate(360deg)}}
+.landing-logo{font-size:2.4rem;font-weight:300;letter-spacing:3px;
+  background:linear-gradient(120deg,var(--gold),var(--rose),var(--gold));
+  background-size:200% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;
+  animation:shine 4s ease-in-out infinite;cursor:pointer;user-select:none;margin-bottom:6px}
+@keyframes shine{0%,100%{background-position:0% 50%}50%{background-position:100% 50%}}
+.landing-sub{opacity:.65;font-size:.9rem;letter-spacing:4px;margin-bottom:30px;text-transform:uppercase}
+.landing-card{background:rgba(42,34,48,.88);backdrop-filter:blur(10px);
+  padding:26px;border-radius:22px;border:1px solid rgba(212,175,55,.18);
+  max-width:380px;width:100%;box-shadow:0 10px 40px rgba(0,0,0,.5);position:relative;z-index:1}
+.landing-emoji{font-size:3.2rem;margin-bottom:12px;animation:float 3s ease-in-out infinite}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+.team-pick{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:14px 0}
+.team-btn{padding:20px 10px;border-radius:14px;border:2px solid var(--border);
+  background:var(--card2);color:var(--ink);cursor:pointer;font-size:1rem;font-weight:bold;transition:all .2s}
+.team-btn.sel-braut{border-color:var(--braut);background:rgba(232,164,184,.15);color:var(--braut)}
+.team-btn.sel-braeutigam{border-color:var(--braeutigam);background:rgba(107,163,199,.15);color:var(--braeutigam)}
+.team-btn .ic{display:block;font-size:2rem;margin-bottom:4px}
+.host-hint{position:absolute;bottom:16px;font-size:.7rem;opacity:.3}
+
+/* === TEAM SCORE BOARD === */
+.team-board{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0}
+.team-card{padding:16px;border-radius:14px;text-align:center;border:2px solid var(--border)}
+.team-card.braut{background:rgba(232,164,184,.12);border-color:var(--braut)}
+.team-card.braeutigam{background:rgba(107,163,199,.12);border-color:var(--braeutigam)}
+.team-card .nm{font-size:.8rem;opacity:.8;margin-bottom:4px;text-transform:uppercase;letter-spacing:1px}
+.team-card .pts{font-size:2.4rem;font-weight:900;letter-spacing:1px}
+.team-card.braut .pts{color:var(--braut)}
+.team-card.braeutigam .pts{color:var(--braeutigam)}
+.team-card .mem{font-size:.75rem;opacity:.6;margin-top:4px}
+.team-winning{box-shadow:0 0 20px rgba(212,175,55,.4);transform:scale(1.03)}
+
+/* === SCORE ROWS === */
+.score-row{display:flex;justify-content:space-between;align-items:center;padding:10px 13px;border-radius:10px;margin:4px 0;background:var(--card2);font-size:.9rem}
+.score-row.me{background:rgba(212,175,55,.15);border:1px solid var(--gold)}
+.score-row .tm{font-size:.7rem;padding:2px 7px;border-radius:8px;margin-right:6px}
+.score-row .tm.braut{background:var(--braut);color:#2a1a20}
+.score-row .tm.braeutigam{background:var(--braeutigam);color:#0f2030}
+
+/* === GAME DISPLAY === */
+.q-big{font-size:1.3rem;color:var(--gold);text-align:center;margin:14px 0;font-weight:600;line-height:1.35}
+.photo-box{width:100%;max-width:400px;margin:10px auto;border-radius:14px;overflow:hidden;background:var(--card2);aspect-ratio:1;display:flex;align-items:center;justify-content:center}
+.photo-box img{width:100%;height:100%;object-fit:cover}
+.photo-box .ph{font-size:3rem;opacity:.3}
+.flash{padding:12px;border-radius:10px;background:rgba(78,207,106,.15);border-left:3px solid var(--green);margin:10px 0;font-size:.9rem}
+.flash.warn{background:rgba(232,90,90,.15);border-left-color:var(--red)}
+.flash.gold{background:rgba(212,175,55,.15);border-left-color:var(--gold)}
+.flash.rose{background:rgba(232,164,184,.15);border-left-color:var(--rose)}
+.timer{font-size:1.8rem;color:var(--gold);text-align:center;font-weight:bold;margin:8px 0}
+.result-bar{height:28px;border-radius:6px;overflow:hidden;display:flex;margin:10px 0;background:var(--card2);position:relative}
+.result-bar .rb{display:flex;align-items:center;justify-content:center;color:#fff;font-weight:bold;font-size:.85rem;transition:width .6s ease-out}
+.result-bar .rb.braut{background:var(--braut);color:#2a1a20}
+.result-bar .rb.braeutigam{background:var(--braeutigam)}
+.toast{position:fixed;bottom:30px;left:50%;transform:translateX(-50%);background:var(--gold);color:#000;padding:12px 20px;border-radius:25px;font-weight:bold;z-index:200;animation:toastIn .3s;max-width:90%;text-align:center}
+@keyframes toastIn{from{transform:translateX(-50%) translateY(20px);opacity:0}to{transform:translateX(-50%) translateY(0);opacity:1}}
+
+/* === TAB BAR === */
+.tabbar{display:flex;justify-content:space-around;background:var(--card);border-radius:14px;padding:6px;margin-bottom:10px;border:1px solid var(--border)}
+.tab{flex:1;background:none;border:none;color:var(--muted);padding:10px 4px;font-size:.75rem;text-align:center;cursor:pointer;border-radius:10px;margin:0}
+.tab.active{color:var(--gold);background:rgba(212,175,55,.12)}
+.tab .ic{display:block;font-size:1.3rem;margin-bottom:2px}
+
+/* === BEAMER MODE === */
+body.beamer-mode{background:#0a0810;padding:0}
+body.beamer-mode .wrap{max-width:1400px}
+body.beamer-mode .beamer-view{min-height:100vh;display:flex;flex-direction:column;justify-content:center;padding:60px 40px;text-align:center}
+body.beamer-mode .beamer-view h1{font-size:4rem;color:var(--gold);margin:0 0 20px;font-weight:300;letter-spacing:2px}
+body.beamer-mode .beamer-view .question{font-size:3rem;color:var(--ink);margin:30px auto;max-width:80%;line-height:1.3}
+body.beamer-mode .beamer-view .photo-box{max-width:500px;aspect-ratio:1}
+body.beamer-mode .beamer-view .photo-box img{object-fit:cover}
+body.beamer-mode .beamer-view .sub-big{font-size:1.5rem;opacity:.7;margin:10px 0}
+body.beamer-mode .beamer-view .big-counter{font-size:5rem;font-weight:900;color:var(--gold)}
+body.beamer-mode .beamer-view .team-score-big{display:grid;grid-template-columns:1fr 1fr;gap:30px;margin-top:40px;max-width:1000px;width:100%;align-self:center}
+body.beamer-mode .beamer-view .team-score-big .tcard{padding:40px;border-radius:20px;border:3px solid var(--border)}
+body.beamer-mode .beamer-view .team-score-big .tcard.braut{background:rgba(232,164,184,.1);border-color:var(--braut)}
+body.beamer-mode .beamer-view .team-score-big .tcard.braeutigam{background:rgba(107,163,199,.1);border-color:var(--braeutigam)}
+body.beamer-mode .beamer-view .team-score-big .tcard .label{font-size:1.8rem;text-transform:uppercase;letter-spacing:3px;opacity:.8}
+body.beamer-mode .beamer-view .team-score-big .tcard .value{font-size:7rem;font-weight:900;margin:10px 0}
+body.beamer-mode .beamer-view .team-score-big .tcard.braut .value{color:var(--braut)}
+body.beamer-mode .beamer-view .team-score-big .tcard.braeutigam .value{color:var(--braeutigam)}
+</style>
+</head>
+<body>
+
+<!-- ===== LOGIN ===== -->
+<div id="login">
+  <div class="landing-logo" id="landingLogo">♥ HOCHZEIT ♥</div>
+  <div class="landing-sub" id="coupleName">Das Rate-Spiel</div>
+  <div class="landing-card">
+    <div class="landing-emoji">💍</div>
+    <h2 style="margin:6px 0">Herzlich willkommen!</h2>
+    <div class="sub">Gib deinen Namen ein und wähle dein Team</div>
+    <input id="nameInp" placeholder="Dein Name" maxlength="24" autocomplete="off">
+    <div class="team-pick">
+      <button class="team-btn" data-team="braut"><span class="ic">👰</span>Team Braut</button>
+      <button class="team-btn" data-team="braeutigam"><span class="ic">🤵</span>Team Bräutigam</button>
+    </div>
+    <button id="btnJoin">Mitmachen</button>
+    <button id="btnHost" class="btn-ghost hidden" style="margin-top:8px">Als Host starten</button>
+  </div>
+  <div class="host-hint">v1 · 3× Logo tippen für Host-Modus</div>
+</div>
+
+<!-- ===== APP (player view) ===== -->
+<div id="app" class="wrap hidden">
+  <div class="topbar">
+    <h1>♥ Rate-Abend</h1>
+    <div class="badge" id="userBadge"></div>
+  </div>
+
+  <div class="tabbar">
+    <button class="tab active" data-tab="Game"><span class="ic">🎮</span>Spiel</button>
+    <button class="tab" data-tab="Score"><span class="ic">🏆</span>Rangliste</button>
+    <button class="tab" data-tab="Host"><span class="ic">👑</span>Host</button>
+  </div>
+
+  <!-- GAME TAB -->
+  <div id="tabGame" class="tabPane">
+    <div id="gamePanel" class="card hidden">
+      <div id="gameBody"></div>
+    </div>
+    <div id="gameWait" class="card">
+      <div style="text-align:center;padding:20px">
+        <div style="font-size:3rem">⏳</div>
+        <h2 style="margin-top:10px">Warten auf nächste Runde</h2>
+        <div class="sub">Der Host startet gleich ein Spiel...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCORE TAB -->
+  <div id="tabScore" class="tabPane hidden">
+    <div class="card">
+      <h2 style="text-align:center">Team-Stand</h2>
+      <div class="team-board" id="teamBoard"></div>
+    </div>
+    <div class="card">
+      <h3>Einzel-Rangliste</h3>
+      <div id="leaderboard"></div>
+    </div>
+  </div>
+
+  <!-- HOST TAB -->
+  <div id="tabHost" class="tabPane hidden">
+    <div class="card">
+      <h2>👑 Host-Panel</h2>
+      <div id="hostStatus" class="sub"></div>
+      <button id="btnTakeHost" class="btn-ghost">Host übernehmen</button>
+    </div>
+    <div id="hostControls" class="hidden">
+      <div class="card">
+        <h3>🎯 Neues Spiel starten</h3>
+        <select id="gameTypeSel">
+          <option value="who">Wer von beiden? (Braut oder Bräutigam)</option>
+          <option value="estimate">Schätzfrage (Zahl erraten)</option>
+          <option value="photo">Kindheitsfoto-Rätsel</option>
+          <option value="prognose">Ehe-Prognose (ohne richtige Antwort)</option>
+          <option value="family">Familie / Custom Optionen</option>
+        </select>
+        <select id="presetSel"><option value="">-- Vorbereitete Frage wählen --</option></select>
+        <button id="btnLoadPreset" class="btn-ghost btn-sm" style="width:auto">Frage laden</button>
+        <hr>
+        <input id="qText" placeholder="Frage" maxlength="200">
+        <div id="qExtra"></div>
+        <button id="btnStartGame" class="btn-green">🚀 Runde starten</button>
+      </div>
+      <div class="card">
+        <h3>🔧 Aktuelle Runde</h3>
+        <button id="btnReveal" class="btn-green">✓ Auflösung zeigen</button>
+        <button id="btnEndGame" class="btn-red">✗ Runde abbrechen</button>
+      </div>
+      <div class="card">
+        <h3>🖥️ Beamer</h3>
+        <div class="sub">Öffne am Beamer-Laptop diese URL in einem neuen Tab:</div>
+        <div id="beamerUrl" style="background:var(--card2);padding:10px;border-radius:8px;font-family:monospace;font-size:.8rem;word-break:break-all;margin:6px 0"></div>
+        <button id="btnCopyUrl" class="btn-ghost btn-sm" style="width:auto">URL kopieren</button>
+      </div>
+      <div class="card">
+        <h3>⚙️ Einstellungen</h3>
+        <div class="row">
+          <input id="nameBraut" placeholder="Name Braut">
+          <input id="nameBraeutigam" placeholder="Name Bräutigam">
+        </div>
+        <button id="btnSaveNames" class="btn-ghost btn-sm" style="width:auto">Namen speichern</button>
+        <hr>
+        <button class="btn-ghost" id="btnResetScores">Alle Scores auf 0</button>
+        <button class="btn-red" id="btnFullReset">⚠️ Kompletter Neustart</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== BEAMER VIEW (separate URL with ?beamer=1) ===== -->
+<div id="beamer" class="wrap hidden">
+  <div class="beamer-view" id="beamerView"></div>
+</div>
+
+<div id="toastContainer"></div>
+
+<script type="module" src="./js/content.js"></script>
+<script type="module" src="./js/core.js"></script>
+<script type="module" src="./js/games.js"></script>
+<script type="module" src="./js/beamer.js"></script>
+</body>
+</html>
