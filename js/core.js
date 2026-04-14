@@ -43,6 +43,7 @@ async function awardScore(player, pts){
   const cur = (await get(r)).val() || 0;
   await set(r, cur + pts);
 }
+// === core.js – Auto-Login Fix ===
 
 // === BEAMER-MODE CHECK ===
 const urlParams = new URLSearchParams(location.search);
@@ -55,9 +56,11 @@ if(urlParams.get("beamer") === "1"){
   connectBeamer();
 } else {
   initLogin();
+  attemptAutoLogin(); // <-- HIER direkt beim Start ausführen!
 }
 
 async function connectBeamer(){
+  // ... (bleibt wie vorher)
   onValue(ref(db, `rooms/${App.room}/meta`),    snap=>{ App.meta = snap.val() || {}; beamerUpdate(); });
   onValue(ref(db, `rooms/${App.room}/players`), snap=>{ App.players = snap.val() || {}; beamerUpdate(); });
   onValue(ref(db, `rooms/${App.room}/teams`),   snap=>{ App.teams = snap.val() || {}; beamerUpdate(); });
@@ -67,60 +70,84 @@ async function connectBeamer(){
 }
 function beamerUpdate(){ if(App.listeners.onBeamerUpdate) App.listeners.onBeamerUpdate(); }
 
-// === LOGIN ===
-function initLogin(){
-  let selectedTeam = null;
-  document.querySelectorAll("[data-team]").forEach(btn=>{
-    btn.onclick = ()=>{
-      selectedTeam = btn.dataset.team;
-      document.querySelectorAll("[data-team]").forEach(b=>{
-        b.classList.remove("sel-braut", "sel-braeutigam");
-      });
-      btn.classList.add("sel-"+selectedTeam);
-    };
-  });
 
-  // 3× Logo tippen = Host-Button einblenden
-  let taps = 0, tapTimer;
-  App.$("landingLogo").addEventListener("click", ()=>{
-    taps++;
-    clearTimeout(tapTimer);
-    tapTimer = setTimeout(()=>{ taps=0; }, 1500);
-    if(taps >= 3){
-      App.$("btnHost").classList.remove("hidden");
-      toast("Host-Modus freigeschaltet 👑");
-      taps = 0;
+async function attemptAutoLogin() {
+  const savedUid = localStorage.getItem("wedding_uid");
+  if (!savedUid) return; // Kein alter Login gefunden
+
+  // Namen vorsichtshalber schon mal ins Input-Feld schreiben
+  const savedName = localStorage.getItem("wedding_name") || savedUid.split('_')[0];
+  if (App.$("nameInp")) App.$("nameInp").value = savedName;
+
+  try {
+    // 1. Prüfen: Bin ich ein normaler Spieler?
+    const pSnap = await get(ref(db, `rooms/${App.room}/players/${savedUid}`));
+    if (pSnap.exists()) {
+      const data = pSnap.val();
+      App.user = savedUid;
+      App.userName = data.name;
+      App.team = data.team;
+      finishLogin(); // Direkt ins Spiel springen!
+      return;
     }
-  });
 
-  App.$("btnJoin").onclick = ()=>start(false, selectedTeam);
-  App.$("btnHost").onclick = ()=>start(true, null); // Host hat KEIN Team
-
-  if(window.HochzeitContent){
-    const c = window.HochzeitContent;
-    App.$("coupleName").innerText = `${c.braut} ♥ ${c.braeutigam}`;
+    // 2. Prüfen: Bin ich der Host? (Der Host steht in 'meta', nicht in 'players')
+    const mSnap = await get(ref(db, `rooms/${App.room}/meta`));
+    if (mSnap.exists()) {
+      const meta = mSnap.val();
+      if (meta.host === savedUid) {
+        App.user = savedUid;
+        App.userName = meta.hostName || savedName;
+        // isHost wird in attachListeners() auf true gesetzt
+        finishLogin(); // Direkt ins Host-Panel springen!
+      }
+    }
+  } catch (error) {
+    console.error("Auto-login fehler:", error);
   }
 }
 
-// === core.js Ergänzungen/Änderungen ===
+// In der start()-Funktion müssen wir noch den Namen abspeichern:
+async function start(takeHost, team) {
+  const inputName = App.$("nameInp").value.trim();
+  if (!inputName) return alert("Bitte Namen eingeben!");
+  if (!takeHost && !team) return alert("Bitte Team wählen!");
 
-// 1. Beim Laden der Seite: Auto-Login prüfen
-A.listeners.onReady = () => {
-  const savedUid = localStorage.getItem("wedding_uid");
-  if (savedUid) {
-    autoLogin(savedUid);
-  }
-};
+  let finalName = inputName;
+  let uid = localStorage.getItem("wedding_uid") || (inputName + "_" + Math.random().toString(36).substr(2, 4));
 
-async function autoLogin(uid) {
-  const pSnap = await get(ref(db, `rooms/${App.room}/players/${uid}`));
-  if (pSnap.exists()) {
-    const data = pSnap.val();
-    App.user = uid;
-    App.userName = data.name;
-    App.team = data.team;
-    finishLogin();
+  // Namenskollision prüfen (nur für Spieler)
+  const playersSnap = await get(ref(db, `rooms/${App.room}/players`));
+  const players = playersSnap.val() || {};
+  
+  if (!takeHost) {
+    let nameExists = Object.values(players).some(p => p.name === finalName && p.uid !== uid);
+    if (nameExists) {
+      let count = 2;
+      while (Object.values(players).some(p => p.name === (inputName + " " + count))) { count++; }
+      finalName = inputName + " " + count;
+      toast(`Name angepasst: ${finalName}`);
+    }
   }
+
+  App.user = uid; 
+  App.userName = finalName;
+  App.team = team;
+  
+  // WICHTIG: Hier speichern wir die UID und den Namen lokal ab
+  localStorage.setItem("wedding_uid", uid);
+  localStorage.setItem("wedding_name", finalName);
+
+  // ... (Rest der start() Funktion bleibt exakt wie vorher)
+  if (takeHost) {
+    await update(ref(db, `rooms/${App.room}/meta`), { host: uid, hostName: finalName });
+  } else {
+    await update(ref(db, `rooms/${App.room}/players/${uid}`), {
+      name: finalName, team: team, uid: uid,
+      score: players[uid]?.score || 0, joined: Date.now()
+    });
+  }
+  finishLogin();
 }
 
 // === core.js Korrekturen ===
