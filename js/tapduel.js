@@ -2,31 +2,39 @@
 const A = window.App, { db, ref, set, onValue, update, get, remove, $, toast } = A;
 
 const DURATION_SEC = 15;
-let hostTimer = null; // Dieser Timer sorgt dafür, dass der Host die Runden automatisch weiterschaltet
+let hostTimer = null; 
+let currentPhase = null; // Neu: Merkt sich die aktuelle Phase für die Spieler
 
 const prevReady = A.listeners.onReady;
 A.listeners.onReady = ()=>{
   if(prevReady) prevReady();
 
-  // Nur noch EIN Listener, der alles sauber überwacht
   onValue(ref(db, `rooms/${A.room}/tapduel`), snap => {
     const d = snap.val();
     A.state.tapduel = d;
 
-    // Wenn ein Tap-Duell existiert, zwinge alle in den Game-Tab
     if (d) {
       A.switchTab("Game"); 
+    } else {
+      currentPhase = null; // Reset, wenn das Spiel gelöscht wurde
     }
+
+    // 🚀 DER 80-GÄSTE PERFORMANCE FIX 🚀
+    // Wenn das Spiel läuft und wir ein normaler Spieler sind, 
+    // ignorieren wir alle Firebase-Updates! Das verhindert das Zurückspringen.
+    if (!A.isHost && !A.isBeamer && d && d.phase === "running" && currentPhase === "running") {
+      return; 
+    }
+
+    currentPhase = d ? d.phase : null;
 
     render();
     renderHostButton();
 
-    // WICHTIG: Der Host steuert die Zeit vollautomatisch
     if (A.isHost && d) {
-      if (hostTimer) clearTimeout(hostTimer); // Alte Timer löschen
+      if (hostTimer) clearTimeout(hostTimer); 
 
       if (d.phase === "countdown") {
-        // Wecker stellen, bis der Countdown abgelaufen ist
         const left = Math.max(0, d.startsAt - Date.now());
         hostTimer = setTimeout(() => {
           if(A.state.tapduel?.phase === "countdown") {
@@ -35,7 +43,6 @@ A.listeners.onReady = ()=>{
         }, left);
       }
       else if (d.phase === "running") {
-        // Wecker stellen, bis die 15 Sekunden um sind
         const left = Math.max(0, d.endsAt - Date.now());
         hostTimer = setTimeout(() => {
           if(A.state.tapduel?.phase === "running") {
@@ -53,16 +60,15 @@ A.listeners.onReady = ()=>{
 function renderHostButton(){
   const btn = $("btnStartTap");
   if(!btn) return;
-  btn.disabled = !!A.state.tapduel; // Button sperren, wenn schon was läuft
+  btn.disabled = !!A.state.tapduel;
 }
 
 async function startTapDuel(){
   if(!A.isHost) return;
-  // Konflikte mit einem evtl. laufenden normalen Quiz vermeiden
   await remove(ref(db, `rooms/${A.room}/quiz`));
   await remove(ref(db, `rooms/${A.room}/game`));
 
-  const startsAt = Date.now() + 3000; // 3 Sekunden Countdown
+  const startsAt = Date.now() + 3000; 
   await set(ref(db, `rooms/${A.room}/tapduel`), {
     phase: "countdown",
     startsAt,
@@ -82,7 +88,6 @@ async function finishTapDuel() {
   const players = A.players || {};
   const teamStats = { braut: { sum: 0, n: 0 }, braeutigam: { sum: 0, n: 0 } };
 
-  // WICHTIG: Nur Leute zählen, die wirklich getippt haben (>0)
   for (const [uid, count] of Object.entries(taps)) {
     const p = players[uid];
     if (p && count > 0) {
@@ -91,7 +96,6 @@ async function finishTapDuel() {
     }
   }
 
-  // Durchschnitt berechnen
   for (const k of ["braut", "braeutigam"]) {
     teamStats[k].avg = teamStats[k].n > 0 ? teamStats[k].sum / teamStats[k].n : 0;
   }
@@ -99,7 +103,6 @@ async function finishTapDuel() {
   const winner = teamStats.braut.avg > teamStats.braeutigam.avg ? "braut" :
                  teamStats.braeutigam.avg > teamStats.braut.avg ? "braeutigam" : null;
 
-  // Dem Gewinner-Team 1 Rundensieg gutschreiben
   if (winner) {
     const tRef = ref(db, `rooms/${A.room}/teams/${winner}`);
     const cur = (await get(tRef)).val() || 0;
@@ -112,9 +115,6 @@ async function finishTapDuel() {
   });
 }
 
-// ═══════════════════════════════════════════════════════════
-// PLAYER-SICHT (Handy / Host-Kontrollansicht)
-// ═══════════════════════════════════════════════════════════
 function render(){
   const d = A.state.tapduel;
   const panel = $("tapPanel"), wait = $("gameWait"), gamePanel = $("gamePanel");
@@ -123,7 +123,6 @@ function render(){
     return;
   }
   
-  // Sichtbarkeiten für Tap-Duell setzen
   panel.classList.remove("hidden");
   wait.classList.add("hidden");
   gamePanel.classList.add("hidden");
@@ -144,7 +143,6 @@ function render(){
       <div class="sub" style="text-align:center">Team mit den meisten Taps pro Person gewinnt 1 Rundensieg</div>`;
 
     A.clearTimers();
-    // Lässt die Zahl 3..2..1 auf dem Handy optisch runterzählen
     A.timers.push(setInterval(render, 250));
     return;
   }
@@ -163,7 +161,6 @@ function render(){
       <div class="timer-bar"><div class="fill" id="tapTimerBar" style="width:${pct}%"></div></div>`;
 
     if(isHost){
-      // Host: Sieht eine Live-Übersicht der Taps
       const taps = d.taps || {};
       const ts = { braut: { sum:0, n:0 }, braeutigam: { sum:0, n:0 } };
       for(const [p, c] of Object.entries(taps)){
@@ -186,14 +183,12 @@ function render(){
         </div>
       </div>`;
     } else {
-      // Spieler: Riesiger Tap-Button
       html += `<div class="tap-count ${teamClass}">${myCount}</div>
         <button class="tap-btn btn-${teamClass}" id="tapBtn">TAP! ${teamLabel}</button>`;
     }
 
     body.innerHTML = html;
 
-    // Balken und Sekundenanzeige optisch flüssig runterlaufen lassen
     A.clearTimers();
     A.timers.push(setInterval(()=>{
       const l = Math.max(0, d.endsAt - Date.now());
@@ -203,10 +198,9 @@ function render(){
       if(tn) tn.innerText = s + "s";
       if(tb) tb.style.width = p + "%";
       if(l <= 0) A.clearTimers();
-      if(isHost && (A.timers.length % 4 === 0)) render(); // Live-Stats Refresh für den Host
+      if(isHost && (A.timers.length % 4 === 0)) render(); 
     }, 250));
 
-    // Klick-Logik mit Drosselung (schont die Datenbank, wie besprochen)
     const btn = $("tapBtn");
     if(btn && !isHost){
       let localCount = myCount;
@@ -217,15 +211,15 @@ function render(){
         setTimeout(async()=>{
           await set(ref(db, `rooms/${A.room}/tapduel/taps/${A.user}`), localCount);
           pending = false;
-        }, 1000); // 1 Sekunde Verzögerung
+        }, 1000); 
       };
       
       btn.onclick = ()=>{
-        if(Date.now() >= d.endsAt) return; // Nichts mehr zählen, wenn Zeit um
+        if(Date.now() >= d.endsAt) return; 
         localCount++;
         const disp = document.querySelector(".tap-count");
-        if(disp) disp.innerText = localCount; // UI sofort updaten
-        flush(); // An Firebase senden
+        if(disp) disp.innerText = localCount; 
+        flush(); 
       };
     }
     return;
