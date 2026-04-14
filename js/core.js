@@ -15,20 +15,20 @@ const firebaseConfig = {
 
 const fbApp = initializeApp(firebaseConfig);
 const db = getDatabase(fbApp);
-const ROOM = "HOCHZEIT"; // Fester Raumcode – kein Eintippen nötig
+const ROOM = "HOCHZEIT";
 
-// === Globales App-Objekt ===
 const App = window.App = {
   db, ref, set, onValue, update, get, remove,
   user: null, team: null, room: ROOM, isHost: false,
-  state: {}, players: {}, meta: {},
+  state: {}, players: {}, meta: {}, teams: {},
   timers: [],
   listeners: {},
   $: id => document.getElementById(id),
-  toast, awardScore, switchTab, clearTimers, isBeamer: false
+  toast, awardScore, switchTab, clearTimers, shuffle, isBeamer: false
 };
 
 function clearTimers(){ App.timers.forEach(t=>{clearInterval(t);clearTimeout(t)}); App.timers=[]; }
+function shuffle(a){ return [...a].sort(()=>Math.random()-0.5); }
 
 function toast(text, duration=2500){
   const c = App.$("toastContainer");
@@ -52,31 +52,23 @@ if(urlParams.get("beamer") === "1"){
   App.$("login").classList.add("hidden");
   App.$("app").classList.add("hidden");
   App.$("beamer").classList.remove("hidden");
-  // Beamer verbindet sich automatisch ohne Login
   connectBeamer();
 } else {
-  // Normaler Login-Flow
   initLogin();
 }
 
 async function connectBeamer(){
-  onValue(ref(db, `rooms/${App.room}/meta`), snap=>{
-    App.meta = snap.val() || {};
-    if(App.listeners.onMeta) App.listeners.onMeta();
-  });
-  onValue(ref(db, `rooms/${App.room}/players`), snap=>{
-    App.players = snap.val() || {};
-    if(App.listeners.onBeamerUpdate) App.listeners.onBeamerUpdate();
-  });
-  onValue(ref(db, `rooms/${App.room}/game`), snap=>{
-    App.state.game = snap.val();
-    if(App.listeners.onBeamerUpdate) App.listeners.onBeamerUpdate();
-  });
+  onValue(ref(db, `rooms/${App.room}/meta`),    snap=>{ App.meta = snap.val() || {}; beamerUpdate(); });
+  onValue(ref(db, `rooms/${App.room}/players`), snap=>{ App.players = snap.val() || {}; beamerUpdate(); });
+  onValue(ref(db, `rooms/${App.room}/teams`),   snap=>{ App.teams = snap.val() || {}; beamerUpdate(); });
+  onValue(ref(db, `rooms/${App.room}/game`),    snap=>{ App.state.game = snap.val(); beamerUpdate(); });
+  onValue(ref(db, `rooms/${App.room}/quiz`),    snap=>{ App.state.quiz = snap.val(); beamerUpdate(); });
+  onValue(ref(db, `rooms/${App.room}/tapduel`), snap=>{ App.state.tapduel = snap.val(); beamerUpdate(); });
 }
+function beamerUpdate(){ if(App.listeners.onBeamerUpdate) App.listeners.onBeamerUpdate(); }
 
 // === LOGIN ===
 function initLogin(){
-  // Team-Auswahl
   let selectedTeam = null;
   document.querySelectorAll("[data-team]").forEach(btn=>{
     btn.onclick = ()=>{
@@ -88,7 +80,7 @@ function initLogin(){
     };
   });
 
-  // 3× Logo tippen für Host-Modus
+  // 3× Logo tippen = Host-Button einblenden
   let taps = 0, tapTimer;
   App.$("landingLogo").addEventListener("click", ()=>{
     taps++;
@@ -102,9 +94,8 @@ function initLogin(){
   });
 
   App.$("btnJoin").onclick = ()=>start(false, selectedTeam);
-  App.$("btnHost").onclick = ()=>start(true, selectedTeam);
+  App.$("btnHost").onclick = ()=>start(true, null); // Host hat KEIN Team
 
-  // Zeige Paar-Namen aus content.js wenn verfügbar
   if(window.HochzeitContent){
     const c = window.HochzeitContent;
     App.$("coupleName").innerText = `${c.braut} ♥ ${c.braeutigam}`;
@@ -114,32 +105,32 @@ function initLogin(){
 async function start(takeHost, team){
   const name = App.$("nameInp").value.trim();
   if(!name) return alert("Bitte Namen eingeben!");
-  if(!team) return alert("Bitte Team wählen (Braut oder Bräutigam)!");
+  if(!takeHost && !team) return alert("Bitte Team wählen!");
   App.user = name;
   App.team = team;
 
-  // Raum initialisieren
   const metaSnap = await get(ref(db, `rooms/${App.room}/meta`));
   if(!metaSnap.exists()){
     const c = window.HochzeitContent || {};
     await set(ref(db, `rooms/${App.room}/meta`), {
-      host: App.user,
-      created: Date.now(),
-      braut: c.braut || "Braut",
-      braeutigam: c.braeutigam || "Bräutigam"
+      host: App.user, created: Date.now(),
+      braut: c.braut || "Braut", braeutigam: c.braeutigam || "Bräutigam"
     });
+    await set(ref(db, `rooms/${App.room}/teams`), { braut: 0, braeutigam: 0 });
   } else if(takeHost){
     await update(ref(db, `rooms/${App.room}/meta`), { host: App.user });
   }
 
-  // Spieler speichern/updaten
-  const pRef = ref(db, `rooms/${App.room}/players/${App.user}`);
-  const existing = (await get(pRef)).val();
-  await set(pRef, {
-    team: team,
-    score: existing ? (existing.score || 0) : 0,
-    joined: existing ? (existing.joined || Date.now()) : Date.now()
-  });
+  // Host wird NICHT in players gespeichert (spielt nicht mit)
+  if(!takeHost){
+    const pRef = ref(db, `rooms/${App.room}/players/${App.user}`);
+    const existing = (await get(pRef)).val();
+    await set(pRef, {
+      team: team,
+      score: existing ? (existing.score || 0) : 0,
+      joined: existing ? (existing.joined || Date.now()) : Date.now()
+    });
+  }
 
   App.$("login").classList.add("hidden");
   App.$("app").classList.remove("hidden");
@@ -153,13 +144,14 @@ function attachListeners(){
     const m = snap.val() || {};
     App.meta = m;
     App.isHost = (m.host === App.user);
-    const teamEmoji = App.team === "braut" ? "👰" : "🤵";
+    const teamEmoji = App.team === "braut" ? "👰" : App.team === "braeutigam" ? "🤵" : "👑";
+    const teamClass = App.team || "host";
     App.$("userBadge").innerHTML =
-      `<span class="badge ${App.team}">${teamEmoji} ${App.user}</span>` +
+      `<span class="badge ${teamClass}">${teamEmoji} ${App.user}</span>` +
       (App.isHost ? ' <span class="badge host">(Host)</span>' : '');
     App.$("hostStatus").innerHTML = `Aktueller Host: <b>${m.host || '-'}</b>`;
-    App.$("btnTakeHost").style.display = App.isHost ? "none" : "block";
     App.$("hostControls").classList.toggle("hidden", !App.isHost);
+    document.querySelectorAll(".hostOnly").forEach(el=>el.classList.toggle("hidden", !App.isHost));
     if(m.braut) App.$("nameBraut").value = m.braut;
     if(m.braeutigam) App.$("nameBraeutigam").value = m.braeutigam;
     if(App.listeners.onMeta) App.listeners.onMeta();
@@ -170,28 +162,24 @@ function attachListeners(){
     renderLeaderboard();
     if(App.listeners.onPlayers) App.listeners.onPlayers();
   });
+  onValue(ref(db, `rooms/${App.room}/teams`), snap=>{
+    App.teams = snap.val() || { braut: 0, braeutigam: 0 };
+    renderTeamBoard();
+  });
 }
 
 function bindCoreUI(){
-  // Tabs
   document.querySelectorAll(".tab").forEach(t=>{
     t.onclick = ()=>switchTab(t.dataset.tab);
   });
 
-  // Host takeover
-  App.$("btnTakeHost").onclick = async()=>{
-    if(!confirm("Host übernehmen?")) return;
-    await update(ref(db, `rooms/${App.room}/meta`), { host: App.user });
-    toast("Du bist jetzt Host");
-  };
-
-  // Reset scores
   App.$("btnResetScores").onclick = async()=>{
     if(!App.isHost || !confirm("Alle Scores auf 0?")) return;
     const upd = {};
     Object.keys(App.players).forEach(p=>{ upd[`${p}/score`] = 0; });
     await update(ref(db, `rooms/${App.room}/players`), upd);
-    toast("Scores zurückgesetzt");
+    await set(ref(db, `rooms/${App.room}/teams`), { braut: 0, braeutigam: 0 });
+    toast("Alles zurückgesetzt");
   };
 
   App.$("btnFullReset").onclick = async()=>{
@@ -200,7 +188,6 @@ function bindCoreUI(){
     location.reload();
   };
 
-  // Namen speichern
   App.$("btnSaveNames").onclick = async()=>{
     if(!App.isHost) return;
     const b = App.$("nameBraut").value.trim();
@@ -210,7 +197,6 @@ function bindCoreUI(){
     toast("Namen gespeichert");
   };
 
-  // Beamer-URL anzeigen
   const bu = location.origin + location.pathname + "?beamer=1";
   App.$("beamerUrl").innerText = bu;
   App.$("btnCopyUrl").onclick = ()=>{
@@ -228,28 +214,30 @@ function switchTab(name){
 function renderTeamBoard(){
   const board = App.$("teamBoard"); if(!board) return;
   const players = App.players || {};
-  const teams = { braut: { score: 0, members: [] }, braeutigam: { score: 0, members: [] } };
+  const teams = { braut: { members: [] }, braeutigam: { members: [] } };
   Object.entries(players).forEach(([n, p])=>{
     if(p.team === "braut" || p.team === "braeutigam"){
-      teams[p.team].score += (p.score || 0);
       teams[p.team].members.push(n);
     }
   });
+  const t = App.teams || { braut: 0, braeutigam: 0 };
   const m = App.meta || {};
   const nameB = m.braut || "Braut";
   const nameBr = m.braeutigam || "Bräutigam";
-  const winB = teams.braut.score > teams.braeutigam.score;
-  const winBr = teams.braeutigam.score > teams.braut.score;
+  const winB = (t.braut || 0) > (t.braeutigam || 0);
+  const winBr = (t.braeutigam || 0) > (t.braut || 0);
 
   board.innerHTML = `
     <div class="team-card braut ${winB?'team-winning':''}">
       <div class="nm">👰 Team ${nameB}</div>
-      <div class="pts">${teams.braut.score}</div>
+      <div class="pts">${t.braut || 0}</div>
+      <div class="pts-sub">Rundensiege</div>
       <div class="mem">${teams.braut.members.length} Mitglieder</div>
     </div>
     <div class="team-card braeutigam ${winBr?'team-winning':''}">
       <div class="nm">🤵 Team ${nameBr}</div>
-      <div class="pts">${teams.braeutigam.score}</div>
+      <div class="pts">${t.braeutigam || 0}</div>
+      <div class="pts-sub">Rundensiege</div>
       <div class="mem">${teams.braeutigam.members.length} Mitglieder</div>
     </div>
   `;

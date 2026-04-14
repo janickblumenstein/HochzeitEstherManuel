@@ -1,200 +1,251 @@
-// === games.js – Spielmodi ===
-const A = window.App, { db, ref, set, onValue, update, get, remove, $, toast, awardScore } = A;
+// === games.js – Quiz-Runner mit Sets, Timer und fairer Team-Wertung ===
+const A = window.App, { db, ref, set, onValue, update, get, remove, $, toast, awardScore, shuffle } = A;
 
 const prevReady = A.listeners.onReady;
 A.listeners.onReady = ()=>{
   if(prevReady) prevReady();
+  onValue(ref(db, `rooms/${A.room}/quiz`), snap=>{
+    A.state.quiz = snap.val();
+    renderHostStatus();
+  });
   onValue(ref(db, `rooms/${A.room}/game`), snap=>{
     A.state.game = snap.val();
     renderGame();
-    renderHostControls();
+    renderHostStatus();
+    maybeStartClientTimer();
   });
   bindHostUI();
+  populateSetDropdown();
 };
 
 // ═══════════════════════════════════════════════════════════
-// HOST: Spiel starten
+// HOST-UI
 // ═══════════════════════════════════════════════════════════
+function populateSetDropdown(){
+  const sel = $("setSel"); if(!sel) return;
+  const sets = (window.HochzeitContent || {}).sets || [];
+  sel.innerHTML = sets.map(s=>`<option value="${s.id}">${s.label}</option>`).join("");
+}
+
 function bindHostUI(){
-  const typeSel = $("gameTypeSel");
-  const presetSel = $("presetSel");
+  $("btnStartSet").onclick = startSelectedSet;
+  $("btnReveal").onclick = revealCurrent;
+  $("btnNextQ").onclick = nextQuestion;
+  $("btnAddTime").onclick = ()=>addTimerSeconds(10);
+  $("btnEndGame").onclick = abortGame;
+}
 
-  const refreshPresets = ()=>{
-    const type = typeSel.value;
-    const presets = (window.HochzeitContent || {})[type] || [];
-    presetSel.innerHTML = '<option value="">-- Vorbereitete Frage wählen --</option>' +
-      presets.map((p, i)=>`<option value="${i}">${i+1}. ${p.q}</option>`).join("");
-    refreshExtraFields();
+function renderHostStatus(){
+  const rs = $("runningStatus");
+  const q = A.state.quiz, g = A.state.game;
+  if(!rs) return;
+
+  const revealBtn = $("btnReveal"), nextBtn = $("btnNextQ"), timeBtn = $("btnAddTime");
+  revealBtn.disabled = !(g && g.phase === "answer");
+  timeBtn.disabled = !(g && g.phase === "answer");
+
+  if(!q && !g && !A.state.tapduel){
+    rs.innerHTML = "Kein Spiel aktiv";
+    nextBtn.classList.add("hidden");
+    return;
+  }
+  if(A.state.tapduel){
+    rs.innerHTML = `⚡ Tap-Duell läuft`;
+    nextBtn.classList.add("hidden");
+    return;
+  }
+  if(q && g){
+    const answered = Object.keys(g.answers || {}).length;
+    const total = Object.values(A.players).length;
+    rs.innerHTML = `📋 ${q.setLabel}<br>
+      Frage ${q.current + 1}/${q.total} · ${answered}/${total} geantwortet<br>
+      Phase: <b>${g.phase === "answer" ? "Antworten" : "Auflösung"}</b>`;
+    const isLast = q.current + 1 >= q.total;
+    nextBtn.classList.toggle("hidden", !(g.phase === "reveal"));
+    nextBtn.innerText = g.phase === "reveal" ? (isLast ? "🏁 Quiz beenden" : "➡️ Nächste Frage") : "";
+  } else if(g){
+    const answered = Object.keys(g.answers || {}).length;
+    const total = Object.values(A.players).length;
+    rs.innerHTML = `Einzelfrage · ${answered}/${total} geantwortet · Phase: <b>${g.phase}</b>`;
+    nextBtn.classList.add("hidden");
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// QUIZ-SET STARTEN
+// ═══════════════════════════════════════════════════════════
+async function startSelectedSet(){
+  if(!A.isHost) return;
+  // Cleanup mögliche alte Zustände
+  await remove(ref(db, `rooms/${A.room}/tapduel`));
+
+  const setId = $("setSel").value;
+  const sets = (window.HochzeitContent || {}).sets || [];
+  const setDef = sets.find(s=>s.id === setId);
+  if(!setDef) return toast("Set nicht gefunden");
+
+  const questions = buildQuestionList(setDef.pick);
+  if(!questions.length) return toast("Keine Fragen in diesem Set");
+
+  const overrideTimer = parseInt($("timerOverride").value);
+  const timer = !isNaN(overrideTimer) && overrideTimer > 0 ? overrideTimer : setDef.timer;
+
+  const quiz = {
+    setId, setLabel: setDef.label,
+    total: questions.length,
+    current: 0,
+    questions,
+    timer,
+    startedAt: Date.now()
   };
+  await set(ref(db, `rooms/${A.room}/quiz`), quiz);
+  await loadQuestion(0);
+  toast(`🚀 ${setDef.label} gestartet`);
+  A.switchTab("Game");
+}
 
-  const refreshExtraFields = ()=>{
-    const type = typeSel.value;
-    const extra = $("qExtra");
-    if(type === "who"){
-      extra.innerHTML = `
-        <div class="sub">Richtige Antwort:</div>
-        <div class="row">
-          <button class="team-btn sel-braut" data-ans="braut">👰 Braut</button>
-          <button class="team-btn sel-braeutigam" data-ans="braeutigam">🤵 Bräutigam</button>
-        </div>
-        <div id="answerIndicator" class="sub" style="text-align:center"></div>
-      `;
-      setAnswerButtons();
-    }
-    else if(type === "estimate"){
-      extra.innerHTML = `
-        <input id="qAnswer" type="number" step="any" placeholder="Richtige Antwort (Zahl)">
-        <input id="qUnit" placeholder="Einheit (optional), z.B. Jahre, CHF">
-      `;
-    }
-    else if(type === "photo"){
-      extra.innerHTML = `
-        <input id="qPhoto" placeholder="Foto-URL (https://...)">
-        <div class="sub">Richtige Antwort:</div>
-        <div class="row">
-          <button class="team-btn sel-braut" data-ans="braut">👰 Braut</button>
-          <button class="team-btn sel-braeutigam" data-ans="braeutigam">🤵 Bräutigam</button>
-        </div>
-        <div id="answerIndicator" class="sub" style="text-align:center"></div>
-      `;
-      setAnswerButtons();
-    }
-    else if(type === "prognose"){
-      extra.innerHTML = `<div class="sub">💡 Ehe-Prognose = keine richtige Antwort. Gäste stimmen ab, Mehrheit gewinnt für ihr Team 1 Punkt.</div>`;
-    }
-    else if(type === "family"){
-      extra.innerHTML = `
-        <div class="row">
-          <input id="qOptA" placeholder="Option A">
-          <input id="qOptB" placeholder="Option B">
-        </div>
-        <div class="sub">Richtige Antwort:</div>
-        <div class="row">
-          <button class="team-btn sel-braut" data-ans="a">A</button>
-          <button class="team-btn sel-braeutigam" data-ans="b">B</button>
-        </div>
-        <div id="answerIndicator" class="sub" style="text-align:center"></div>
-      `;
-      setAnswerButtons();
-    }
-  };
-
-  const setAnswerButtons = ()=>{
-    let sel = null;
-    document.querySelectorAll("[data-ans]").forEach(btn=>{
-      btn.onclick = (e)=>{
-        e.preventDefault();
-        sel = btn.dataset.ans;
-        document.querySelectorAll("[data-ans]").forEach(b=>b.style.outline = "");
-        btn.style.outline = "3px solid var(--gold)";
-        const ind = $("answerIndicator");
-        if(ind) ind.innerText = "✓ Ausgewählt: " + btn.innerText;
-        $("_tempAnswer") && $("_tempAnswer").remove();
-        const hid = document.createElement("input");
-        hid.type = "hidden"; hid.id = "_tempAnswer"; hid.value = sel;
-        document.body.appendChild(hid);
-      };
-    });
-  };
-
-  typeSel.onchange = refreshPresets;
-  refreshPresets();
-
-  $("btnLoadPreset").onclick = ()=>{
-    const idx = parseInt(presetSel.value);
-    if(isNaN(idx)) return toast("Keine Frage gewählt");
-    const type = typeSel.value;
-    const p = (window.HochzeitContent || {})[type][idx];
-    if(!p) return;
-    $("qText").value = p.q || "";
-    if(type === "who" || type === "photo" || type === "family"){
-      const ansVal = p.answer;
-      const btn = document.querySelector(`[data-ans="${ansVal}"]`);
-      if(btn) btn.click();
-    }
-    if(type === "estimate"){
-      $("qAnswer").value = p.answer;
-      $("qUnit").value = p.unit || "";
-    }
-    if(type === "photo"){
-      $("qPhoto").value = p.photoUrl || "";
-    }
-    if(type === "family"){
-      $("qOptA").value = p.optA || "";
-      $("qOptB").value = p.optB || "";
-    }
-    toast("Frage geladen – du kannst sie noch anpassen");
-  };
-
-  $("btnStartGame").onclick = async()=>{
-    if(!A.isHost) return;
-    const type = typeSel.value;
-    const q = $("qText").value.trim();
-    if(!q) return toast("Bitte Frage eingeben!");
-
-    const game = {
-      type, q,
-      phase: "answer",
-      answers: {},
-      startedAt: Date.now()
-    };
-
-    if(type === "who" || type === "photo"){
-      const ans = ($("_tempAnswer") || {}).value;
-      if(!ans) return toast("Bitte richtige Antwort wählen!");
-      game.answer = ans;
-      if(type === "photo"){
-        const url = $("qPhoto").value.trim();
-        if(!url) return toast("Bitte Foto-URL eintragen!");
-        game.photoUrl = url;
+function buildQuestionList(pick){
+  const pool = (window.HochzeitContent || {}).questions || {};
+  const out = [];
+  for(const [type, amount] of Object.entries(pick)){
+    if(type === "random"){
+      // Mische alle Kategorien zusammen, zieh N zufällig
+      const all = [];
+      for(const [t, arr] of Object.entries(pool)){
+        (arr || []).forEach(q=>all.push({ ...q, type: t }));
+      }
+      const picked = shuffle(all).slice(0, amount);
+      out.push(...picked);
+    } else {
+      const arr = pool[type] || [];
+      if(amount === "all"){
+        out.push(...arr.map(q=>({ ...q, type })));
+      } else {
+        out.push(...shuffle(arr).slice(0, amount).map(q=>({ ...q, type })));
       }
     }
-    else if(type === "estimate"){
-      const ans = parseFloat($("qAnswer").value);
-      if(isNaN(ans)) return toast("Bitte eine Zahl als Antwort eingeben!");
-      game.answer = ans;
-      game.unit = $("qUnit").value.trim();
-    }
-    else if(type === "family"){
-      const a = $("qOptA").value.trim(), b = $("qOptB").value.trim();
-      const ans = ($("_tempAnswer") || {}).value;
-      if(!a || !b) return toast("Bitte beide Optionen eintragen!");
-      if(!ans) return toast("Bitte richtige Antwort wählen!");
-      game.optA = a; game.optB = b; game.answer = ans;
-    }
-    // prognose → keine Antwort
-
-    await set(ref(db, `rooms/${A.room}/game`), game);
-    $("qText").value = "";
-    $("_tempAnswer") && $("_tempAnswer").remove();
-    document.querySelectorAll("[data-ans]").forEach(b=>b.style.outline = "");
-    toast("🚀 Runde gestartet!");
-    A.switchTab("Game");
-  };
-
-  $("btnReveal").onclick = reveal;
-  $("btnEndGame").onclick = async()=>{
-    if(!A.isHost) return;
-    await remove(ref(db, `rooms/${A.room}/game`));
-    toast("Runde beendet");
-  };
+  }
+  return out;
 }
 
-function renderHostControls(){
-  const g = A.state.game;
-  const hasGame = !!g;
-  const inAnswer = g && g.phase === "answer";
-  $("btnReveal").disabled = !inAnswer;
-  $("btnEndGame").disabled = !hasGame;
+async function loadQuestion(idx){
+  if(!A.isHost) return;
+  const q = (await get(ref(db, `rooms/${A.room}/quiz`))).val();
+  if(!q) return;
+  if(idx >= q.total){ return finishQuiz(); }
+
+  const qData = q.questions[idx];
+  const endsAt = Date.now() + q.timer * 1000;
+  const game = {
+    type: qData.type,
+    q: qData.q,
+    phase: "answer",
+    startedAt: Date.now(),
+    endsAt,
+    answers: {},
+    quizIdx: idx
+  };
+  if(qData.answer !== undefined) game.answer = qData.answer;
+  if(qData.photoUrl) game.photoUrl = qData.photoUrl;
+  if(qData.unit !== undefined) game.unit = qData.unit;
+  if(qData.optA) game.optA = qData.optA;
+  if(qData.optB) game.optB = qData.optB;
+
+  await set(ref(db, `rooms/${A.room}/game`), game);
+  await update(ref(db, `rooms/${A.room}/quiz`), { current: idx });
+}
+
+async function nextQuestion(){
+  if(!A.isHost) return;
+  const q = (await get(ref(db, `rooms/${A.room}/quiz`))).val();
+  if(!q) return;
+  const nextIdx = (q.current || 0) + 1;
+  if(nextIdx >= q.total) return finishQuiz();
+  await loadQuestion(nextIdx);
+}
+
+async function finishQuiz(){
+  if(!A.isHost) return;
+  const q = (await get(ref(db, `rooms/${A.room}/quiz`))).val();
+  if(!q) return;
+  // Summary in game-Node als finale "Seite"
+  await set(ref(db, `rooms/${A.room}/game`), {
+    type: "_quizdone",
+    q: `Quiz "${q.setLabel}" beendet`,
+    phase: "reveal",
+    startedAt: Date.now(),
+    quizSummary: true
+  });
+  await remove(ref(db, `rooms/${A.room}/quiz`));
+  toast("Quiz beendet");
+}
+
+async function abortGame(){
+  if(!A.isHost) return;
+  if(!confirm("Laufendes Spiel abbrechen?")) return;
+  await remove(ref(db, `rooms/${A.room}/quiz`));
+  await remove(ref(db, `rooms/${A.room}/game`));
+  await remove(ref(db, `rooms/${A.room}/tapduel`));
+  toast("Abgebrochen");
+}
+
+async function addTimerSeconds(sec){
+  if(!A.isHost) return;
+  const g = (await get(ref(db, `rooms/${A.room}/game`))).val();
+  if(!g || g.phase !== "answer") return;
+  await update(ref(db, `rooms/${A.room}/game`), { endsAt: (g.endsAt || Date.now()) + sec * 1000 });
+  toast(`+${sec} Sek`);
 }
 
 // ═══════════════════════════════════════════════════════════
-// PLAYER: Aktuelles Spiel anzeigen
+// CLIENT-TIMER: Host löst auto auf wenn Zeit um
+// ═══════════════════════════════════════════════════════════
+function maybeStartClientTimer(){
+  A.clearTimers();
+  const g = A.state.game;
+  if(!g || g.phase !== "answer" || !g.endsAt) return;
+
+  // Timer-Anzeige aktualisieren (alle)
+  const tick = ()=>{
+    const left = Math.max(0, g.endsAt - Date.now());
+    updateTimerDisplay(left, g.endsAt - g.startedAt);
+    if(left <= 0){
+      A.clearTimers();
+      // Nur Host löst auf (um Race Conditions zu vermeiden)
+      if(A.isHost) revealCurrent();
+    }
+  };
+  tick();
+  A.timers.push(setInterval(tick, 250));
+}
+
+function updateTimerDisplay(leftMs, totalMs){
+  const leftSec = Math.ceil(leftMs / 1000);
+  const pct = totalMs > 0 ? (leftMs / totalMs) * 100 : 0;
+  const fill = document.getElementById("timerFill");
+  const num = document.getElementById("timerNum");
+  if(fill){
+    fill.style.width = pct + "%";
+    fill.classList.toggle("warn", leftSec <= 10 && leftSec > 5);
+    fill.classList.toggle("crit", leftSec <= 5);
+  }
+  if(num) num.innerText = leftSec + "s";
+}
+
+// ═══════════════════════════════════════════════════════════
+// PLAYER-SICHT: Aktuelles Spiel
 // ═══════════════════════════════════════════════════════════
 function renderGame(){
-  const g = A.state.game;
-  const panel = $("gamePanel");
-  const wait = $("gameWait");
+  const g = A.state.game, q = A.state.quiz, tap = A.state.tapduel;
+  const panel = $("gamePanel"), wait = $("gameWait");
+
+  // Wenn Tap-Duell läuft, blendet games.js sich aus
+  if(tap){
+    panel.classList.add("hidden");
+    wait.classList.add("hidden");
+    return;
+  }
+
   if(!g){
     panel.classList.add("hidden");
     wait.classList.remove("hidden");
@@ -203,28 +254,53 @@ function renderGame(){
   panel.classList.remove("hidden");
   wait.classList.add("hidden");
   const body = $("gameBody");
-  const myAns = (g.answers || {})[A.user];
 
-  let html = `<div class="q-big">${g.q}</div>`;
-
-  // Foto wenn vorhanden
-  if(g.type === "photo" && g.photoUrl){
-    html += `<div class="photo-box"><img src="${g.photoUrl}" alt="Foto" onerror="this.parentElement.innerHTML='<div class=&quot;ph&quot;>📷</div>'"></div>`;
+  // Quiz-Ende Summary
+  if(g.type === "_quizdone"){
+    body.innerHTML = renderQuizSummary();
+    return;
   }
 
-  // ----- ANSWER PHASE -----
+  const myAns = (g.answers || {})[A.user];
+  let html = "";
+
+  // Quiz-Progress oben
+  if(q){
+    html += `<div class="q-num">Frage ${q.current + 1} / ${q.total}</div>`;
+  }
+  html += `<div class="q-big">${g.q}</div>`;
+
+  // Foto
+  if(g.type === "photo" && g.photoUrl){
+    html += `<div class="photo-box"><img src="${g.photoUrl}" alt="" onerror="this.parentElement.innerHTML='<div class=&quot;ph&quot;>📷</div>'"></div>`;
+  }
+
+  // ===== ANSWER PHASE =====
   if(g.phase === "answer"){
-    if(myAns !== undefined){
+    // Timer anzeigen
+    if(g.endsAt){
+      html += `<div class="timer-num" id="timerNum"></div>
+        <div class="timer-bar"><div class="fill" id="timerFill"></div></div>`;
+    }
+
+    if(A.isHost){
+      // Host sieht Live-Status, keine Antwort-Inputs
+      const answered = Object.keys(g.answers || {}).length;
+      const total = Object.values(A.players).length;
+      html += `<div class="flash gold">👑 Du bist Host – du spielst nicht mit.</div>`;
+      html += `<div class="flash">${answered} / ${total} haben geantwortet</div>`;
+      html += `<div class="sub" style="text-align:center">Steuerung im Host-Tab unten</div>`;
+    } else if(myAns !== undefined){
       const label = labelForAnswer(g, myAns);
       html += `<div class="flash">✅ Deine Antwort: <b>${label}</b></div>`;
-      const total = Object.keys(A.players).length;
       const cnt = Object.keys(g.answers || {}).length;
+      const total = Object.values(A.players).length;
       html += `<div class="sub" style="text-align:center">${cnt}/${total} haben geantwortet</div>`;
     } else {
       html += buildAnswerInput(g);
     }
   }
-  // ----- REVEAL PHASE -----
+  // ===== REVEAL PHASE =====
   else if(g.phase === "reveal"){
     html += buildRevealView(g);
   }
@@ -235,33 +311,26 @@ function renderGame(){
 
 function labelForAnswer(g, ans){
   const m = A.meta || {};
-  if(g.type === "who" || g.type === "photo"){
+  if(g.type === "who" || g.type === "photo" || g.type === "prognose"){
     return ans === "braut" ? (m.braut || "Braut") : (m.braeutigam || "Bräutigam");
   }
-  if(g.type === "family"){
-    return ans === "a" ? g.optA : g.optB;
-  }
-  if(g.type === "prognose"){
-    return ans === "braut" ? (m.braut || "Braut") : (m.braeutigam || "Bräutigam");
-  }
-  if(g.type === "estimate"){
-    return g.unit ? `${ans} ${g.unit}` : String(ans);
-  }
+  if(g.type === "family"){ return ans === "a" ? g.optA : g.optB; }
+  if(g.type === "estimate"){ return g.unit ? `${ans} ${g.unit}` : String(ans); }
   return String(ans);
 }
 
 function buildAnswerInput(g){
   const m = A.meta || {};
   if(g.type === "who" || g.type === "photo" || g.type === "prognose"){
-    return `<div class="grid2" style="margin-top:20px">
-      <button class="btn-braut" data-send="braut" style="padding:24px;font-size:1.1rem">👰<br>${m.braut || "Braut"}</button>
-      <button class="btn-braeutigam" data-send="braeutigam" style="padding:24px;font-size:1.1rem">🤵<br>${m.braeutigam || "Bräutigam"}</button>
+    return `<div class="grid2" style="margin-top:16px">
+      <button class="btn-braut" data-send="braut" style="padding:22px;font-size:1rem">👰<br>${m.braut || "Braut"}</button>
+      <button class="btn-braeutigam" data-send="braeutigam" style="padding:22px;font-size:1rem">🤵<br>${m.braeutigam || "Bräutigam"}</button>
     </div>`;
   }
   if(g.type === "family"){
-    return `<div class="grid2" style="margin-top:20px">
-      <button class="btn-braut" data-send="a" style="padding:24px;font-size:1rem">${g.optA}</button>
-      <button class="btn-braeutigam" data-send="b" style="padding:24px;font-size:1rem">${g.optB}</button>
+    return `<div class="grid2" style="margin-top:16px">
+      <button class="btn-braut" data-send="a" style="padding:22px;font-size:1rem">${g.optA}</button>
+      <button class="btn-braeutigam" data-send="b" style="padding:22px;font-size:1rem">${g.optB}</button>
     </div>`;
   }
   if(g.type === "estimate"){
@@ -288,71 +357,88 @@ function wireAnswerInputs(g){
 }
 
 // ═══════════════════════════════════════════════════════════
-// REVEAL LOGIC (Host-Trigger)
+// AUFLÖSUNG: Team-Fairness nach Trefferquote
 // ═══════════════════════════════════════════════════════════
-async function reveal(){
+async function revealCurrent(){
   if(!A.isHost) return;
   const g = (await get(ref(db, `rooms/${A.room}/game`))).val();
-  if(!g) return;
+  if(!g || g.phase !== "answer") return;
 
   const answers = g.answers || {};
-  let result = { correctPlayers: [], teamPoints: { braut: 0, braeutigam: 0 }, breakdown: null };
+  const players = A.players || {};
+  // Host-Antworten rausfiltern (Host soll nicht in players sein, aber zur Sicherheit)
+  const validAnswers = {};
+  for(const [p, a] of Object.entries(answers)){
+    if(players[p]) validAnswers[p] = a;
+  }
 
-  // ----- WHO / PHOTO / FAMILY: Direkte richtige Antwort -----
+  let result = {
+    correctPlayers: [],
+    breakdown: null,
+    teamStats: null,          // { braut: {correct, total, rate}, braeutigam: {...} }
+    roundWinner: null         // "braut" | "braeutigam" | null
+  };
+
+  // -------- WHO / PHOTO / FAMILY: richtige Antwort ----------
   if(g.type === "who" || g.type === "photo" || g.type === "family"){
-    for(const [player, ans] of Object.entries(answers)){
+    const teamStats = { braut: { correct: 0, total: 0 }, braeutigam: { correct: 0, total: 0 } };
+    for(const [player, ans] of Object.entries(validAnswers)){
+      const t = (players[player] || {}).team;
+      if(!t || !teamStats[t]) continue;
+      teamStats[t].total++;
       if(ans === g.answer){
         await awardScore(player, 1);
         result.correctPlayers.push(player);
-        const t = (A.players[player] || {}).team;
-        if(t) result.teamPoints[t]++;
+        teamStats[t].correct++;
       }
     }
+    // Quoten berechnen
+    for(const k of ["braut","braeutigam"]){
+      teamStats[k].rate = teamStats[k].total > 0 ? teamStats[k].correct / teamStats[k].total : 0;
+    }
+    // Rundensieger
+    if(teamStats.braut.rate > teamStats.braeutigam.rate) result.roundWinner = "braut";
+    else if(teamStats.braeutigam.rate > teamStats.braut.rate) result.roundWinner = "braeutigam";
+    // Breakdown für Anzeige
     const counts = {};
-    Object.values(answers).forEach(a=>{ counts[a] = (counts[a] || 0) + 1; });
+    Object.values(validAnswers).forEach(a=>{ counts[a] = (counts[a] || 0) + 1; });
     result.breakdown = counts;
+    result.teamStats = teamStats;
   }
-  // ----- ESTIMATE: Nächstdran gewinnt -----
+  // -------- ESTIMATE: nächster gewinnt ----------
   else if(g.type === "estimate"){
-    const entries = Object.entries(answers).map(([p, v])=>({ p, v, diff: Math.abs(v - g.answer) }));
+    const entries = Object.entries(validAnswers).map(([p, v])=>({
+      p, v, diff: Math.abs(v - g.answer), team: (players[p] || {}).team
+    }));
     entries.sort((a, b)=>a.diff - b.diff);
+    // Einzelpunkte: Top 3 = 3/2/1
     if(entries.length){
-      // Top 3 bekommen 3/2/1 Punkt
       const awards = [3, 2, 1];
       for(let i = 0; i < Math.min(3, entries.length); i++){
-        const pts = awards[i];
-        const { p } = entries[i];
-        await awardScore(p, pts);
-        result.correctPlayers.push({ p, pts, diff: entries[i].diff, v: entries[i].v });
-        const t = (A.players[p] || {}).team;
-        if(t) result.teamPoints[t] += pts;
+        await awardScore(entries[i].p, awards[i]);
       }
+      // Rundensieger = Team des Siegers
+      result.roundWinner = entries[0].team || null;
       result.ranking = entries.slice(0, 8);
     }
   }
-  // ----- PROGNOSE: Mehrheit = +1 für Team -----
+  // -------- PROGNOSE: Mehrheit holt Rundensieg ----------
   else if(g.type === "prognose"){
     const counts = { braut: 0, braeutigam: 0 };
-    Object.values(answers).forEach(a=>{ if(counts[a] !== undefined) counts[a]++; });
-    const winner = counts.braut > counts.braeutigam ? "braut" :
-                   counts.braeutigam > counts.braut ? "braeutigam" : null;
-    if(winner){
-      // Alle die AUF DEM Gewinner-Team sind und dafür gestimmt haben → +1
-      for(const [p, a] of Object.entries(answers)){
-        if(a === winner && (A.players[p] || {}).team === winner){
-          await awardScore(p, 1);
-          result.correctPlayers.push(p);
-        }
-      }
-      result.majorityWinner = winner;
-    }
+    Object.values(validAnswers).forEach(a=>{ if(counts[a] !== undefined) counts[a]++; });
+    if(counts.braut > counts.braeutigam) result.roundWinner = "braut";
+    else if(counts.braeutigam > counts.braut) result.roundWinner = "braeutigam";
     result.breakdown = counts;
   }
 
-  await update(ref(db, `rooms/${A.room}/game`), {
-    phase: "reveal",
-    result
-  });
+  // Rundensieg aufs Team-Konto
+  if(result.roundWinner){
+    const tRef = ref(db, `rooms/${A.room}/teams/${result.roundWinner}`);
+    const cur = (await get(tRef)).val() || 0;
+    await set(tRef, cur + 1);
+  }
+
+  await update(ref(db, `rooms/${A.room}/game`), { phase: "reveal", result });
 }
 
 function buildRevealView(g){
@@ -362,32 +448,44 @@ function buildRevealView(g){
   const r = g.result || {};
   let html = "";
 
+  // Richtige Antwort
   if(g.type === "who" || g.type === "photo" || g.type === "family"){
-    const correctLabel = labelForAnswer(g, g.answer);
+    const correctLabel = g.type === "family" ? (g.answer === "a" ? g.optA : g.optB) :
+                         (g.answer === "braut" ? nameB : nameBr);
     html += `<div class="flash gold"><b>✓ Richtige Antwort:</b> ${correctLabel}</div>`;
-    // Vote-Verteilung
+
+    // Antwort-Verteilung
     const counts = r.breakdown || {};
-    const total = Object.values(counts).reduce((s, c)=>s + c, 0) || 1;
     if(g.type === "family"){
       const a = counts["a"] || 0, b = counts["b"] || 0;
+      const total = a + b || 1;
       html += `<div class="result-bar">
         <div class="rb braut" style="width:${a/total*100}%">${a > 0 ? a : ''}</div>
         <div class="rb braeutigam" style="width:${b/total*100}%">${b > 0 ? b : ''}</div>
       </div>
-      <div class="row" style="font-size:.8rem;opacity:.8"><span>${g.optA} (${a})</span><span style="text-align:right">${g.optB} (${b})</span></div>`;
+      <div class="row" style="font-size:.75rem;opacity:.7"><span>${g.optA} (${a})</span><span style="text-align:right">${g.optB} (${b})</span></div>`;
     } else {
       const a = counts["braut"] || 0, b = counts["braeutigam"] || 0;
+      const total = a + b || 1;
       html += `<div class="result-bar">
         <div class="rb braut" style="width:${a/total*100}%">${a > 0 ? a : ''}</div>
         <div class="rb braeutigam" style="width:${b/total*100}%">${b > 0 ? b : ''}</div>
       </div>
-      <div class="row" style="font-size:.8rem;opacity:.8"><span>👰 ${nameB} (${a})</span><span style="text-align:right">${nameBr} 🤵 (${b})</span></div>`;
+      <div class="row" style="font-size:.75rem;opacity:.7"><span>👰 ${nameB} (${a})</span><span style="text-align:right">${nameBr} 🤵 (${b})</span></div>`;
     }
-    // Richtig-Liste
-    if(r.correctPlayers && r.correctPlayers.length){
-      html += `<div class="flash">🎉 Richtig: ${r.correctPlayers.join(", ")} <br>Je +1 Punkt fürs Team!</div>`;
-    } else {
-      html += `<div class="flash warn">Keiner hatte es richtig...</div>`;
+
+    // Team-Quoten
+    if(r.teamStats){
+      const ts = r.teamStats;
+      html += `<h3>Trefferquote:</h3>
+        <div class="score-row">
+          <span>👰 ${nameB}</span>
+          <strong>${ts.braut.correct}/${ts.braut.total} (${(ts.braut.rate*100).toFixed(0)}%)</strong>
+        </div>
+        <div class="score-row">
+          <span>🤵 ${nameBr}</span>
+          <strong>${ts.braeutigam.correct}/${ts.braeutigam.total} (${(ts.braeutigam.rate*100).toFixed(0)}%)</strong>
+        </div>`;
     }
   }
   else if(g.type === "estimate"){
@@ -397,8 +495,7 @@ function buildRevealView(g){
       r.ranking.forEach((e, i)=>{
         const medal = ['🥇','🥈','🥉'][i] || ((i+1)+'.');
         const pts = i < 3 ? ['+3','+2','+1'][i] : '';
-        const tm = (A.players[e.p] || {}).team;
-        const tmIcon = tm === "braut" ? "👰" : tm === "braeutigam" ? "🤵" : "";
+        const tmIcon = e.team === "braut" ? "👰" : "🤵";
         html += `<div class="score-row"><span>${medal} ${tmIcon} ${e.p}: ${e.v}${g.unit?' '+g.unit:''} <span class="sub">(Δ ${e.diff.toFixed(1)})</span></span><strong>${pts}</strong></div>`;
       });
     } else {
@@ -408,22 +505,58 @@ function buildRevealView(g){
   else if(g.type === "prognose"){
     const counts = r.breakdown || { braut: 0, braeutigam: 0 };
     const total = (counts.braut || 0) + (counts.braeutigam || 0) || 1;
-    const winner = r.majorityWinner;
-    html += `<div class="flash rose">💍 Das Orakel sagt:</div>`;
+    html += `<div class="flash rose">💍 Das Orakel hat entschieden:</div>`;
     html += `<div class="result-bar">
       <div class="rb braut" style="width:${counts.braut/total*100}%">${counts.braut}</div>
       <div class="rb braeutigam" style="width:${counts.braeutigam/total*100}%">${counts.braeutigam}</div>
     </div>
-    <div class="row" style="font-size:.8rem;opacity:.8"><span>👰 ${nameB}</span><span style="text-align:right">${nameBr} 🤵</span></div>`;
-    if(winner){
-      const wName = winner === "braut" ? nameB : nameBr;
-      html += `<div class="flash gold">Mehrheit sagt: <b>${wName}</b>! Team ${wName} bekommt +1 je Tipp.</div>`;
-    } else {
-      html += `<div class="flash">Unentschieden – das Orakel ist gespalten!</div>`;
-    }
+    <div class="row" style="font-size:.75rem;opacity:.7"><span>👰 ${nameB}</span><span style="text-align:right">${nameBr} 🤵</span></div>`;
   }
 
-  html += `<hr><div class="sub" style="text-align:center">Der Host startet gleich die nächste Runde...</div>`;
+  // Rundensieger-Banner
+  if(r.roundWinner){
+    const wName = r.roundWinner === "braut" ? nameB : nameBr;
+    const wIcon = r.roundWinner === "braut" ? "👰" : "🤵";
+    html += `<div class="flash gold" style="text-align:center;font-size:1.05rem;margin-top:14px">
+      🏆 Rundensieg für Team ${wIcon} <b>${wName}</b>!
+    </div>`;
+  } else {
+    html += `<div class="flash" style="text-align:center">Unentschieden – keine Rundenpunkte</div>`;
+  }
+
+  return html;
+}
+
+function renderQuizSummary(){
+  const t = A.teams || { braut: 0, braeutigam: 0 };
+  const m = A.meta || {};
+  const nameB = m.braut || "Braut";
+  const nameBr = m.braeutigam || "Bräutigam";
+  const topPlayers = Object.entries(A.players || {})
+    .sort((a,b)=>(b[1].score||0)-(a[1].score||0)).slice(0, 5);
+  const leadTeam = t.braut > t.braeutigam ? "braut" : t.braeutigam > t.braut ? "braeutigam" : null;
+
+  let html = `<div class="q-big">🏁 Quiz beendet!</div>`;
+  html += `<h3>Gesamt-Stand</h3>
+    <div class="team-board">
+      <div class="team-card braut ${leadTeam==="braut"?"team-winning":""}">
+        <div class="nm">👰 Team ${nameB}</div>
+        <div class="pts">${t.braut || 0}</div>
+        <div class="pts-sub">Rundensiege</div>
+      </div>
+      <div class="team-card braeutigam ${leadTeam==="braeutigam"?"team-winning":""}">
+        <div class="nm">🤵 Team ${nameBr}</div>
+        <div class="pts">${t.braeutigam || 0}</div>
+        <div class="pts-sub">Rundensiege</div>
+      </div>
+    </div>`;
+  if(topPlayers.length){
+    html += `<h3>Top-Tipper</h3>` + topPlayers.map(([n,d],i)=>{
+      const medal = ['🥇','🥈','🥉'][i] || ((i+1)+'.');
+      const tm = d.team === "braut" ? "👰 B" : "🤵 Br";
+      return `<div class="score-row"><span><span class="tm ${d.team}">${tm}</span>${medal} ${n}</span><strong>${d.score||0} Pkt</strong></div>`;
+    }).join("");
+  }
   return html;
 }
 
