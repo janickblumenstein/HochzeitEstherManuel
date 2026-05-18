@@ -1,9 +1,9 @@
 // === tapduel.js – Zwischenspiel: Tap-Duell Braut vs. Bräutigam ===
-const A = window.App, { db, ref, set, onValue, update, get, remove, $, toast, awardScore } = A;
+const A = window.App, { db, ref, set, onValue, update, get, remove, $, toast } = A;
 
 const DURATION_SEC = 15;
-let hostTimer = null; 
-let currentPhase = null; 
+let hostTimer = null;
+let currentPhase = null;
 
 const prevReady = A.listeners.onReady;
 A.listeners.onReady = ()=>{
@@ -14,20 +14,20 @@ A.listeners.onReady = ()=>{
     A.state.tapduel = d;
 
     if (d) {
-      A.switchTab("Game"); 
+      A.switchTab("Game");
     } else {
       if (currentPhase !== null) {
         if (A.isHost) {
-          A.switchTab("Host");  
+          A.switchTab("Host");
         } else if (!A.isBeamer) {
-          A.switchTab("Score"); 
+          A.switchTab("Score");
         }
       }
-      currentPhase = null; 
+      currentPhase = null;
     }
 
     if (!A.isHost && !A.isBeamer && d && d.phase === "running" && currentPhase === "running") {
-      return; 
+      return;
     }
 
     currentPhase = d ? d.phase : null;
@@ -36,7 +36,7 @@ A.listeners.onReady = ()=>{
     renderHostButton();
 
     if (A.isHost && d) {
-      if (hostTimer) clearTimeout(hostTimer); 
+      if (hostTimer) clearTimeout(hostTimer);
 
       if (d.phase === "countdown") {
         const left = Math.max(0, d.startsAt - Date.now());
@@ -72,7 +72,7 @@ async function startTapDuel(){
   await remove(ref(db, `rooms/${A.room}/quiz`));
   await remove(ref(db, `rooms/${A.room}/game`));
 
-  const startsAt = Date.now() + 3000; 
+  const startsAt = Date.now() + 3000;
   await set(ref(db, `rooms/${A.room}/tapduel`), {
     phase: "countdown",
     startsAt,
@@ -91,15 +91,14 @@ async function finishTapDuel() {
   const taps = d.taps || {};
   const players = A.players || {};
   const teamStats = { braut: { sum: 0, n: 0 }, braeutigam: { sum: 0, n: 0 } };
+  const tappers = [];
 
-  const tappers = []; 
-  
   for (const [uid, count] of Object.entries(taps)) {
     const p = players[uid];
     if (p && count > 0) {
       teamStats[p.team].sum += count;
       teamStats[p.team].n++;
-      tappers.push({ uid, name: p.name || uid.split('_')[0], count });
+      tappers.push({ uid, name: p.name || uid.split('_')[0], count, team: p.team });
     }
   }
 
@@ -116,32 +115,42 @@ async function finishTapDuel() {
     await set(tRef, cur + 1);
   }
 
-  // 🚀 NEU: Faire Punkteverteilung für Tapper (auch bei Gleichstand!)
+  // Faire Punkteverteilung für Top-Tapper
   tappers.sort((a, b) => b.count - a.count);
-  
+
   const topTappers = [];
   const points = [10, 5, 3];
   let currentRank = 0;
   let lastCount = tappers.length > 0 ? tappers[0].count : -1;
 
+  // ── BATCH: Score-Deltas akkumulieren, dann ein einziges update() ──────
+  const scoreDeltas = {};
+
   for (let i = 0; i < tappers.length; i++) {
-    // Wenn die Taps weniger sind als beim Vorherigen, rutschen wir einen Platz runter
     if (tappers[i].count < lastCount) {
       currentRank++;
       lastCount = tappers[i].count;
     }
-    // Wenn wir die Top 3 (Index 0, 1, 2) verlassen haben, brechen wir ab
     if (currentRank > 2) break;
 
     const pts = points[currentRank];
-    await awardScore(tappers[i].uid, pts);
-    tappers[i].pts = pts; // Punkte merken fürs UI
-    topTappers.push(tappers[i]); // In die Siegerliste aufnehmen
+    scoreDeltas[tappers[i].uid] = pts;
+    tappers[i].pts = pts;
+    topTappers.push(tappers[i]);
   }
+
+  if (Object.keys(scoreDeltas).length > 0) {
+    const scoreUpdates = {};
+    for (const [uid, delta] of Object.entries(scoreDeltas)) {
+      scoreUpdates[`${uid}/score`] = (players[uid]?.score || 0) + delta;
+    }
+    await update(ref(db, `rooms/${A.room}/players`), scoreUpdates);
+  }
+  // ─────────────────────────────────────────────────────────────────────
 
   await update(ref(db, `rooms/${A.room}/tapduel`), {
     phase: "done",
-    teamStats, winner, topTappers 
+    teamStats, winner, topTappers
   });
 }
 
@@ -152,7 +161,7 @@ function render(){
     panel.classList.add("hidden");
     return;
   }
-  
+
   panel.classList.remove("hidden");
   wait.classList.add("hidden");
   gamePanel.classList.add("hidden");
@@ -226,7 +235,7 @@ function render(){
       if(tn) tn.innerText = s + "s";
       if(tb) tb.style.width = p + "%";
       if(l <= 0) A.clearTimers();
-      if(isHost && (A.timers.length % 4 === 0)) render(); 
+      if(isHost && (A.timers.length % 4 === 0)) render();
     }, 250));
 
     const btn = $("tapBtn");
@@ -239,15 +248,15 @@ function render(){
         setTimeout(async()=>{
           await set(ref(db, `rooms/${A.room}/tapduel/taps/${A.user}`), localCount);
           pending = false;
-        }, 1000); 
+        }, 1000);
       };
-      
+
       btn.onclick = ()=>{
-        if(Date.now() >= d.endsAt) return; 
+        if(Date.now() >= d.endsAt) return;
         localCount++;
         const disp = document.querySelector(".tap-count");
-        if(disp) disp.innerText = localCount; 
-        flush(); 
+        if(disp) disp.innerText = localCount;
+        flush();
       };
     }
     return;
@@ -258,7 +267,7 @@ function render(){
     const winner = d.winner;
     const wName = winner === "braut" ? nameB : winner === "braeutigam" ? nameBr : null;
     let html = `<div class="q-big">⚡ Tap-Duell beendet!</div>`;
-    
+
     html += `<div class="team-board">
       <div class="team-card braut ${winner==="braut"?"team-winning":""}">
         <div class="nm">👰 ${nameB}</div>
@@ -275,15 +284,13 @@ function render(){
     </div>`;
 
     if (d.topTappers && d.topTappers.length > 0) {
-      html += `<h3 style="text-align:center; margin-top:24px; color:var(--gold);">🔥 Die schnellsten Finger</h3>`;
+      html += `<h3 style="text-align:center;margin-top:24px;color:var(--gold)">🔥 Die schnellsten Finger</h3>`;
       d.topTappers.forEach((t) => {
-        // Medaille basiert jetzt auf den erreichten Punkten!
         let medal = "🔹";
         if (t.pts === 10) medal = "🥇";
         if (t.pts === 5) medal = "🥈";
         if (t.pts === 3) medal = "🥉";
-        
-        const isMe = t.uid === A.user ? 'style="border:1px solid var(--gold); background:rgba(212,175,55,.15);"' : '';
+        const isMe = t.uid === A.user ? 'style="border:1px solid var(--gold);background:rgba(212,175,55,.15)"' : '';
         html += `<div class="score-row" ${isMe}>
           <span>${medal} ${t.name} <span class="sub">(${t.count} Taps)</span></span>
           <strong style="color:var(--gold)">+${t.pts} Pkt</strong>
@@ -300,11 +307,11 @@ function render(){
     }
 
     if(A.isHost){
-      html += `<button class="btn-ghost" id="tapClose" style="margin-top: 15px">Schliessen</button>`;
+      html += `<button class="btn-ghost" id="tapClose" style="margin-top:15px">Schliessen</button>`;
     }
-    
+
     body.innerHTML = html;
-    
+
     const cl = $("tapClose");
     if(cl) cl.onclick = ()=>remove(ref(db, `rooms/${A.room}/tapduel`));
     A.clearTimers();

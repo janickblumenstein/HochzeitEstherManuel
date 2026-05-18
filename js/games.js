@@ -1,25 +1,21 @@
 // === games.js – Quiz-Runner mit Sets, Timer und fairer Team-Wertung ===
-const A = window.App, { db, ref, set, onValue, update, get, remove, $, toast, awardScore, shuffle } = A;
+const A = window.App, { db, ref, set, onValue, update, get, remove, $, toast, shuffle } = A;
 
 const prevReady = A.listeners.onReady;
 A.listeners.onReady = ()=>{
   if(prevReady) prevReady();
   
-  // 1. Dieser Block bleibt unverändert (wichtig für die Host-Anzeige)
   onValue(ref(db, `rooms/${A.room}/quiz`), snap=>{
     A.state.quiz = snap.val();
     renderHostStatus();
   });
   
-  // 2. Das ist unser neuer, schlauer Block für das aktuelle Spiel
   onValue(ref(db, `rooms/${A.room}/game`), snap => {
     const prevGame = A.state.game;
     const newGame = snap.val();
     A.state.game = newGame;
     
     const isNewQuestionOrPhase = newGame && (!prevGame || prevGame.q !== newGame.q || prevGame.phase !== newGame.phase);
-    
-    // Hat der aktuelle Spieler gerade SEINE EIGENE Antwort abgeschickt?
     const myPrevAns = (prevGame && prevGame.answers) ? prevGame.answers[A.user] : undefined;
     const myNewAns = (newGame && newGame.answers) ? newGame.answers[A.user] : undefined;
     const iJustAnswered = myPrevAns !== myNewAns;
@@ -28,10 +24,8 @@ A.listeners.onReady = ()=>{
       if (!A.isHost && !A.isBeamer) A.switchTab("Game");
       renderGame();
     } else if (iJustAnswered) {
-      // Wenn ich selbst gedrückt habe, muss die Ansicht wechseln (zeigt "✅ Deine Antwort")
       renderGame();
     } else {
-      // Wenn andere antworten, während ich noch überlege: Nur den Zähler updaten!
       updateLiveCounter(newGame);
     }
 
@@ -47,8 +41,7 @@ function updateLiveCounter(g) {
   if (!g || g.phase !== "answer") return;
   const answered = Object.keys(g.answers || {}).length;
   const total = Object.values(A.players).length;
-  const counterEls = document.querySelectorAll(".live-counter-text");
-  counterEls.forEach(el => {
+  document.querySelectorAll(".live-counter-text").forEach(el => {
     el.innerText = `${answered} / ${total} haben geantwortet`;
   });
 }
@@ -135,7 +128,6 @@ async function startSelectedSet(){
   await set(ref(db, `rooms/${A.room}/quiz`), quiz);
   await loadQuestion(0);
   toast(`🚀 ${setDef.label} gestartet`);
-  // A.switchTab("Game"); <-- Wurde entfernt, Host bleibt jetzt sauber im Host-Tab
 }
 
 function buildQuestionList(pick){
@@ -301,7 +293,6 @@ function renderGame(){
     html += `<div class="photo-box"><img src="${g.photoUrl}" alt="" onerror="this.parentElement.innerHTML='<div class=&quot;ph&quot;>📷</div>'"></div>`;
   }
 
-  // ===== ANSWER PHASE =====
   if(g.phase === "answer"){
     if(g.endsAt){
       html += `<div class="timer-num" id="timerNum"></div>
@@ -324,7 +315,6 @@ function renderGame(){
       html += `<div class="sub live-counter-text" style="text-align:center; margin-top: 15px;">${cnt} / ${total} haben geantwortet</div>`;
     }
   }
-  // ===== REVEAL PHASE =====
   else if(g.phase === "reveal"){
     html += buildRevealView(g);
   }
@@ -381,7 +371,9 @@ function wireAnswerInputs(g){
 }
 
 // ═══════════════════════════════════════════════════════════
-// AUFLÖSUNG: Team-Fairness nach Trefferquote
+// AUFLÖSUNG – BATCH-SCORE-UPDATE für 80+ Gäste
+// Statt N einzelner get+set-Aufrufe: alle Punkte berechnen,
+// dann ein einziges update() an Firebase schicken.
 // ═══════════════════════════════════════════════════════════
 async function revealCurrent() {
   if (!A.isHost) return;
@@ -390,20 +382,26 @@ async function revealCurrent() {
 
   const answers = g.answers || {};
   const players = A.players || {};
-  
-  const teamStats = { 
-    braut: { correct: 0, total: 0, rate: 0 }, 
-    braeutigam: { correct: 0, total: 0, rate: 0 } 
+
+  const teamStats = {
+    braut: { correct: 0, total: 0, rate: 0 },
+    braeutigam: { correct: 0, total: 0, rate: 0 }
   };
   const breakdown = { braut: 0, braeutigam: 0, a: 0, b: 0 };
   const ranking = [];
+
+  // Akkumulator: uid -> zu vergebende Punkte (kein Firebase-Read pro Spieler)
+  const scoreDeltas = {};
+  const addScore = (uid, pts) => {
+    scoreDeltas[uid] = (scoreDeltas[uid] || 0) + pts;
+  };
 
   for (const [uid, ans] of Object.entries(answers)) {
     const p = players[uid];
     if (!p) continue;
     breakdown[ans] = (breakdown[ans] || 0) + 1;
     if (p.team === "braut" || p.team === "braeutigam") teamStats[p.team].total++;
-    
+
     if (g.type === "estimate") {
       const diff = Math.abs(ans - g.answer);
       ranking.push({ uid, p: p.name || uid.split('_')[0], team: p.team, v: ans, diff });
@@ -413,11 +411,11 @@ async function revealCurrent() {
   let winner = null;
   let finalCorrectAnswer = g.answer;
 
-  // 1. EHE-PROGNOSE (mit echtem Gleichstand)
+  // 1. EHE-PROGNOSE
   if (g.type === "prognose") {
     if (breakdown.braut > breakdown.braeutigam) finalCorrectAnswer = "braut";
     else if (breakdown.braeutigam > breakdown.braut) finalCorrectAnswer = "braeutigam";
-    else finalCorrectAnswer = "tie"; // 🚀 NEU: Echter Gleichstand
+    else finalCorrectAnswer = "tie";
 
     if (finalCorrectAnswer !== "tie") {
       for (const [uid, ans] of Object.entries(answers)) {
@@ -425,7 +423,7 @@ async function revealCurrent() {
           const p = players[uid];
           if (p) {
             if (p.team === "braut" || p.team === "braeutigam") teamStats[p.team].correct++;
-            await awardScore(uid, 1); 
+            addScore(uid, 1);
           }
         }
       }
@@ -435,17 +433,15 @@ async function revealCurrent() {
       if (teamStats.braut.rate > teamStats.braeutigam.rate) winner = "braut";
       else if (teamStats.braeutigam.rate > teamStats.braut.rate) winner = "braeutigam";
     }
-  } 
-  // 2. SCHÄTZFRAGEN (Faire Punkte bei gleichem Tipp)
-  // 2. SCHÄTZFRAGEN (Faire Punkte & Team-Wertung)
+  }
+  // 2. SCHÄTZFRAGEN
   else if (g.type === "estimate") {
     ranking.sort((a, b) => a.diff - b.diff);
-    
+
     let currentPts = 3;
     let lastDiff = ranking.length > 0 ? ranking[0].diff : -1;
-    let rankPosition = 0; 
+    let rankPosition = 0;
 
-    // Punkte an Individuen verteilen
     for (let i = 0; i < ranking.length; i++) {
       if (ranking[i].diff > lastDiff) {
         rankPosition++;
@@ -453,37 +449,28 @@ async function revealCurrent() {
         lastDiff = ranking[i].diff;
       }
       if (currentPts <= 0) break;
-
-      await awardScore(ranking[i].uid, currentPts);
+      addScore(ranking[i].uid, currentPts);
       ranking[i].awardedPts = currentPts;
     }
 
-    // --- NEUE TEAM-WERTUNG ---
     if (ranking.length > 0) {
       const bestDiff = ranking[0].diff;
-      // Wir suchen alle Spieler, die diese beste Abweichung erreicht haben
       const topWinners = ranking.filter(r => r.diff === bestDiff);
-      
-      let brautWinners = topWinners.filter(r => r.team === "braut").length;
-      let braeutigamWinners = topWinners.filter(r => r.team === "braeutigam").length;
-
-      if (brautWinners > braeutigamWinners) {
-        winner = "braut";
-      } else if (braeutigamWinners > brautWinners) {
-        winner = "braeutigam";
-      } else {
-        winner = null; // Absoluter Gleichstand bei den Top-Tipps -> Unentschieden
-      }
+      const brautWinners = topWinners.filter(r => r.team === "braut").length;
+      const braeutigamWinners = topWinners.filter(r => r.team === "braeutigam").length;
+      if (brautWinners > braeutigamWinners) winner = "braut";
+      else if (braeutigamWinners > brautWinners) winner = "braeutigam";
+      else winner = null;
     }
   }
-  // 3. NORMALES QUIZ
+  // 3. NORMALES QUIZ (who / photo / family)
   else {
     for (const [uid, ans] of Object.entries(answers)) {
       if (ans === g.answer) {
         const p = players[uid];
         if (p) {
           if (p.team === "braut" || p.team === "braeutigam") teamStats[p.team].correct++;
-          await awardScore(uid, 1);
+          addScore(uid, 1);
         }
       }
     }
@@ -494,16 +481,27 @@ async function revealCurrent() {
     else if (teamStats.braeutigam.rate > teamStats.braut.rate) winner = "braeutigam";
   }
 
+  // ── BATCH: alle Punkte in einem einzigen Firebase-Update ──────────────
+  // Anstatt 80× get+set → 1× update mit allen neuen Werten
+  if (Object.keys(scoreDeltas).length > 0) {
+    const scoreUpdates = {};
+    for (const [uid, delta] of Object.entries(scoreDeltas)) {
+      scoreUpdates[`${uid}/score`] = (players[uid]?.score || 0) + delta;
+    }
+    await update(ref(db, `rooms/${A.room}/players`), scoreUpdates);
+  }
+  // ─────────────────────────────────────────────────────────────────────
+
   if (winner) {
     const tRef = ref(db, `rooms/${A.room}/teams/${winner}`);
     const cur = (await get(tRef)).val() || 0;
     await set(tRef, cur + 1);
   }
 
-  await update(ref(db, `rooms/${A.room}/game`), { 
-    phase: "reveal", 
+  await update(ref(db, `rooms/${A.room}/game`), {
+    phase: "reveal",
     answer: finalCorrectAnswer,
-    result: { teamStats, breakdown, ranking, roundWinner: winner } 
+    result: { teamStats, breakdown, ranking, roundWinner: winner }
   });
 }
 
@@ -514,44 +512,40 @@ function buildRevealView(g){
   const r = g.result || {};
   let html = "";
 
-  // Persönliches Feedback
   if (!A.isHost && !A.isBeamer) {
     const myAns = (g.answers || {})[A.user];
-    
     if (g.type === "estimate") {
        const myEntry = (r.ranking || []).find(e => e.uid === A.user);
        if (myEntry && myEntry.awardedPts) {
-         html += `<div class="flash gold" style="text-align:center; font-size:1.1rem; box-shadow: 0 4px 15px rgba(212,175,55,0.3);">🎉 Stark geschätzt! Du holst <b>+${myEntry.awardedPts} Punkte</b>!</div>`;
+         html += `<div class="flash gold" style="text-align:center;font-size:1.1rem;box-shadow:0 4px 15px rgba(212,175,55,0.3)">🎉 Stark geschätzt! Du holst <b>+${myEntry.awardedPts} Punkte</b>!</div>`;
        } else if (myAns !== undefined) {
-         html += `<div class="flash" style="text-align:center;">Guter Versuch, aber leider nicht in den Punkterängen.</div>`;
+         html += `<div class="flash" style="text-align:center">Guter Versuch, aber leider nicht in den Punkterängen.</div>`;
        }
     } else if (g.type === "prognose") {
        if (g.answer === "tie") {
-         html += `<div class="flash" style="text-align:center;">Gleichstand! Das Orakel ist unentschlossen – niemand punktet.</div>`;
+         html += `<div class="flash" style="text-align:center">Gleichstand! Das Orakel ist unentschlossen – niemand punktet.</div>`;
        } else if (myAns === g.answer) {
-         html += `<div class="flash gold" style="text-align:center; font-size:1.1rem; box-shadow: 0 4px 15px rgba(78,207,106,0.3);">🎉 Du bist mit der Mehrheit! <b>+1 Punkt</b>!</div>`;
+         html += `<div class="flash gold" style="text-align:center;font-size:1.1rem;box-shadow:0 4px 15px rgba(78,207,106,0.3)">🎉 Du bist mit der Mehrheit! <b>+1 Punkt</b>!</div>`;
        } else if (myAns !== undefined) {
-         html += `<div class="flash warn" style="text-align:center; font-size:1.1rem;">❌ Du lagst daneben!</div>`;
+         html += `<div class="flash warn" style="text-align:center;font-size:1.1rem">❌ Du lagst daneben!</div>`;
        } else {
-         html += `<div class="flash" style="text-align:center; opacity: 0.7;">Du hast nicht abgestimmt.</div>`;
+         html += `<div class="flash" style="text-align:center;opacity:.7">Du hast nicht abgestimmt.</div>`;
        }
     } else {
        if (myAns === g.answer) {
-         html += `<div class="flash gold" style="text-align:center; font-size:1.1rem; box-shadow: 0 4px 15px rgba(78,207,106,0.3);">🎉 Richtig! <b>+1 Punkt</b> für dich!</div>`;
+         html += `<div class="flash gold" style="text-align:center;font-size:1.1rem;box-shadow:0 4px 15px rgba(78,207,106,0.3)">🎉 Richtig! <b>+1 Punkt</b> für dich!</div>`;
        } else if (myAns !== undefined) {
-         html += `<div class="flash warn" style="text-align:center; font-size:1.1rem;">❌ Leider falsch!</div>`;
+         html += `<div class="flash warn" style="text-align:center;font-size:1.1rem">❌ Leider falsch!</div>`;
        } else {
-         html += `<div class="flash" style="text-align:center; opacity: 0.7;">Du hast keine Antwort abgegeben.</div>`;
+         html += `<div class="flash" style="text-align:center;opacity:.7">Du hast keine Antwort abgegeben.</div>`;
        }
     }
   }
 
-  // Anzeige der richtigen Antwort & Balken
   if(g.type === "who" || g.type === "photo" || g.type === "family"){
     const correctLabel = g.type === "family" ? (g.answer === "a" ? g.optA : g.optB) :
                          (g.answer === "braut" ? nameB : nameBr);
     html += `<div class="flash gold"><b>✓ Richtige Antwort:</b> ${correctLabel}</div>`;
-
     const counts = r.breakdown || {};
     if(g.type === "family"){
       const a = counts["a"] || 0, b = counts["b"] || 0;
@@ -570,7 +564,6 @@ function buildRevealView(g){
       </div>
       <div class="row" style="font-size:.75rem;opacity:.7"><span>👰 ${nameB} (${a})</span><span style="text-align:right">${nameBr} 🤵 (${b})</span></div>`;
     }
-
     if(r.teamStats){
       const ts = r.teamStats;
       html += `<h3>Trefferquote:</h3>
@@ -656,7 +649,7 @@ function renderQuizSummary(){
     html += `<h3>Top-Tipper</h3>` + topPlayers.map(([n,d],i)=>{
       const medal = ['🥇','🥈','🥉'][i] || ((i+1)+'.');
       const tm = d.team === "braut" ? "👰 B" : "🤵 Br";
-      const displayName = d.name || n.split('_')[0]; // 🚀 NEU: Holt den sauberen Namen
+      const displayName = d.name || n.split('_')[0];
       return `<div class="score-row"><span><span class="tm ${d.team}">${tm}</span>${medal} ${displayName}</span><strong>${d.score||0} Pkt</strong></div>`;
     }).join("");
   }
