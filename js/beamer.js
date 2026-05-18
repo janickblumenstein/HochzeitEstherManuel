@@ -7,7 +7,30 @@ let beamerTimerInterval = null;
 
 if(A.isBeamer){
   A.listeners.onBeamerUpdate = render;
+  injectQrOverlay();
   render();
+}
+
+function injectQrOverlay(){
+  const overlay = document.createElement("div");
+  overlay.id = "beamerQrOverlay";
+  overlay.innerHTML = `
+    <div style="background:#fff;padding:7px;border-radius:10px;display:inline-block;box-shadow:0 2px 12px rgba(0,0,0,.5)">
+      <img src="https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(GAME_URL)}" width="120" height="120" alt="QR">
+    </div>
+    <div style="font-family:monospace;font-size:.75rem;color:var(--gold);margin-top:5px;text-align:center;opacity:.8">
+      ${GAME_URL.replace(/^https?:\/\//, '')}
+    </div>
+  `;
+  Object.assign(overlay.style, {
+    position: "fixed",
+    bottom: "24px",
+    right: "28px",
+    zIndex: "999",
+    textAlign: "center",
+    pointerEvents: "none"
+  });
+  document.body.appendChild(overlay);
 }
 
 function startBeamerTimer(){
@@ -50,10 +73,10 @@ function render(){
 function renderIdle(view, nameB, nameBr){
   const t = A.teams || { braut: 0, braeutigam: 0 };
   const guestCount = Object.keys(A.players||{}).length;
-  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(GAME_URL)}&color=d4af37&bgcolor=1a1020&qzone=2`;
 
   view.innerHTML = `
     <h1>♥ ${nameB} & ${nameBr} ♥</h1>
+    <div class="sub-big">Warten auf das nächste Spiel...</div>
     <div class="team-score-big">
       <div class="tcard braut">
         <div class="label">👰 Team ${nameB}</div>
@@ -66,22 +89,7 @@ function renderIdle(view, nameB, nameBr){
         <div class="sublabel">Rundensiege</div>
       </div>
     </div>
-
-    <div style="margin-top:48px;display:flex;flex-direction:column;align-items:center;gap:16px">
-      <div class="sub-big" style="font-size:1.6rem;letter-spacing:2px">📱 Jetzt mitmachen!</div>
-      <div style="background:#fff;padding:14px;border-radius:16px;display:inline-block;box-shadow:0 0 40px rgba(212,175,55,.35)">
-        <img
-          src="${qrUrl}"
-          width="220" height="220"
-          alt="QR-Code"
-          onerror="this.outerHTML='<div style=&quot;width:220px;height:220px;display:flex;align-items:center;justify-content:center;font-size:.9rem;color:#333&quot;>QR nicht ladbar</div>'"
-        >
-      </div>
-      <div style="font-family:monospace;font-size:1.4rem;color:var(--gold);letter-spacing:1px;opacity:.85">
-        ${GAME_URL.replace(/^https?:\/\//, '')}
-      </div>
-      <div class="sub-big" style="opacity:.5;font-size:1rem;margin-top:4px">${guestCount} Gäste bereits verbunden</div>
-    </div>
+    <div class="sub-big" style="margin-top:40px;opacity:.5">${guestCount} Gäste bereits verbunden</div>
   `;
 }
 
