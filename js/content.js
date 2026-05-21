@@ -72,12 +72,12 @@ who: [
   // pick: { random: 10 }   = 10 zufällige aus allen Kategorien gemischt
   // ═══════════════════════════════════════════════════════
   sets: [
-    { id: "whoRound",  label: "👫 Wer-von-beiden (9 Fragen)", pick: { who: 9 },         timer: 20 },
+    { id: "whoRound",  label: "👫 Wer-von-beiden (9 Fragen)", pick: { random: 14 },         timer: 20 }//,
     //{ id: "fotos",     label: "📷 Foto-Quiz (alle Fotos)",    pick: { photos: "all" },  timer: 15 },
     //{ id: "schaetzen", label: "🔢 Schätz-Runde (4 Fragen)",   pick: { estimate: 4 },    timer: 30 },
     //{ id: "familie",   label: "👨‍👩‍👧 Familien-Quiz",              pick: { family: "all" },  timer: 25 },
     //{ id: "prognose",  label: "🔮 Ehe-Prognose (3 Fragen)",   pick: { prognose: 3 },    timer: 20 },
-    { id: "mixed",     label: "🎲 Bunter Mix (10 Fragen)",    pick: { random: 5 },     timer: 20 },
+    //{ id: "mixed",     label: "🎲 Bunter Mix (10 Fragen)",    pick: { random: 5 },     timer: 20 },
     //{ id: "bigFinal",  label: "🏆 Grosses Finale (15 Mixed)", pick: { random: 15 },     timer: 20 }
   ]
 };
