@@ -14,21 +14,16 @@ window.HochzeitContent = {
   questions: {
 
     // --- WER-VON-BEIDEN: answer = "braut" oder "braeutigam" ---
-    who: [
-      { q: "Wer hat den Heiratsantrag gemacht?",         answer: "braeutigam" },
-      { q: "Wer kann besser kochen?",                    answer: "braut" },
-      { q: "Wer schläft länger am Wochenende?",          answer: "braut" },
-      { q: "Wer hat das Bad öfter blockiert?",           answer: "braut" },
-      { q: "Wer vergisst eher den Hochzeitstag?",        answer: "braeutigam" },
-      { q: "Wer wollte zuerst heiraten?",                answer: "braeutigam" },
-      { q: "Wer hat zuerst 'Ich liebe dich' gesagt?",    answer: "braeutigam" },
-      { q: "Wer ist besser im Auto parken?",             answer: "braut" },
-      { q: "Wer flucht lauter beim Möbelaufbau?",        answer: "braeutigam" },
-      { q: "Wer kann besser tanzen?",                    answer: "braut" },
-      { q: "Wer hat mehr Kleider im Schrank?",           answer: "braut" },
-      { q: "Wer ist pünktlicher?",                       answer: "braeutigam" },
-      { q: "Wer weint öfter im Kino?",                   answer: "braut" },
-      { q: "Wer trinkt mehr Kaffee am Morgen?",          answer: "braeutigam" }
+who: [
+      { q: "Wer würde eher zu spät kommen?", answer: "braeutigam" },
+      { q: "Wer würde eher die Orientierung verlieren?", answer: "braut" },
+      { q: "Wer würde eher aus Versehen etwas kaputt machen?", answer: "braut" },
+      { q: "Wer würde eher einen cringe Tanzmove bringen?", answer: "braeutigam" },
+      { q: "Wer würde eher ein Möbelstück falsch zusammenbauen?", answer: "braut" },
+      { q: "Wer kocht besser?", answer: "braeutigam" },
+      { q: "Wer würde eher die Kontrolle am Grill übernehmen?", answer: "braeutigam" },
+      { q: "Wer würde eher im Urlaub einen Sonnenbrand bekommen?", answer: "braeutigam" },
+      { q: "Wer würde eher beim Schätzen komplett danebenliegen?", answer: "braut" }
     ],
 
     // --- SCHÄTZFRAGEN: answer = Zahl ---
@@ -78,14 +73,13 @@ window.HochzeitContent = {
   // pick: { random: 10 }   = 10 zufällige aus allen Kategorien gemischt
   // ═══════════════════════════════════════════════════════
   sets: [
-    { id: "warm",      label: "🔥 Warmmacher (3 leichte)",    pick: { who: 3 },         timer: 20 },
-    { id: "whoRound",  label: "👫 Wer-von-beiden (5 Fragen)", pick: { who: 5 },         timer: 20 },
-    { id: "fotos",     label: "📷 Foto-Quiz (alle Fotos)",    pick: { photos: "all" },  timer: 15 },
-    { id: "schaetzen", label: "🔢 Schätz-Runde (4 Fragen)",   pick: { estimate: 4 },    timer: 30 },
-    { id: "familie",   label: "👨‍👩‍👧 Familien-Quiz",              pick: { family: "all" },  timer: 25 },
-    { id: "prognose",  label: "🔮 Ehe-Prognose (3 Fragen)",   pick: { prognose: 3 },    timer: 20 },
-    { id: "mixed",     label: "🎲 Bunter Mix (10 Fragen)",    pick: { random: 10 },     timer: 20 },
-    { id: "bigFinal",  label: "🏆 Grosses Finale (15 Mixed)", pick: { random: 15 },     timer: 20 }
+    { id: "whoRound",  label: "👫 Wer-von-beiden (9 Fragen)", pick: { who: 9 },         timer: 20 }//,
+    //{ id: "fotos",     label: "📷 Foto-Quiz (alle Fotos)",    pick: { photos: "all" },  timer: 15 },
+    //{ id: "schaetzen", label: "🔢 Schätz-Runde (4 Fragen)",   pick: { estimate: 4 },    timer: 30 },
+    //{ id: "familie",   label: "👨‍👩‍👧 Familien-Quiz",              pick: { family: "all" },  timer: 25 },
+    //{ id: "prognose",  label: "🔮 Ehe-Prognose (3 Fragen)",   pick: { prognose: 3 },    timer: 20 },
+    //{ id: "mixed",     label: "🎲 Bunter Mix (10 Fragen)",    pick: { random: 10 },     timer: 20 },
+    //{ id: "bigFinal",  label: "🏆 Grosses Finale (15 Mixed)", pick: { random: 15 },     timer: 20 }
   ]
 };
 
