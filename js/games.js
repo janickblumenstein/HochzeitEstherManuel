@@ -133,6 +133,38 @@ async function startSelectedSet(){
 function buildQuestionList(pick){
   const pool = (window.HochzeitContent || {}).questions || {};
   const out = [];
+  
+  for(const [type, amount] of Object.entries(pick)){
+    if(type === "random"){
+      const all = [];
+      // Definiere die erlaubten Kategorien für "random"
+      const allowedTypes = ["who", "prognose"];
+      
+      for(const t of allowedTypes){
+        const arr = pool[t] || [];
+        arr.forEach(q => all.push({ ...q, type: t }));
+      }
+      
+      // Schneidet die Liste einfach auf die gewünschte Menge ab, ohne zu mischen
+      const picked = all.slice(0, amount);
+      out.push(...picked);
+      
+    } else {
+      const arr = pool[type] || [];
+      if(amount === "all"){
+        out.push(...arr.map(q => ({ ...q, type })));
+      } else {
+        // Zieht die ersten X Fragen, ohne zu mischen
+        out.push(...arr.slice(0, amount).map(q => ({ ...q, type })));
+      }
+    }
+  }
+  return out;
+}
+/*
+function buildQuestionList(pick){
+  const pool = (window.HochzeitContent || {}).questions || {};
+  const out = [];
   for(const [type, amount] of Object.entries(pick)){
     if(type === "random"){
       const all = [];
@@ -151,7 +183,7 @@ function buildQuestionList(pick){
     }
   }
   return out;
-}
+}*/
 
 async function loadQuestion(idx){
   if(!A.isHost) return;
