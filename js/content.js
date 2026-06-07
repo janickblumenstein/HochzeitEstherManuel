@@ -20,12 +20,13 @@ window.TeensContent = {
   // Reihenfolge = Reihenfolge der Antwort-Buttons.
   // Tipp: Fotos auf imgur.com hochladen → "Bildadresse kopieren".
   // ═══════════════════════════════════════════════════════
+  // (Pseudo-Namen – am Event durch die echten Teens ersetzen)
   teens: [
-    { id: "t1", name: "Teen 1", emoji: "🧑", color: "#e8a4b8", photo: "" },
-    { id: "t2", name: "Teen 2", emoji: "👧", color: "#6ba3c7", photo: "" },
-    { id: "t3", name: "Teen 3", emoji: "👦", color: "#7ed987", photo: "" },
-    { id: "t4", name: "Teen 4", emoji: "👩", color: "#e8a555", photo: "" },
-    { id: "t5", name: "Teen 5", emoji: "🧒", color: "#b98ce8", photo: "" }
+    { id: "t1", name: "Noah",  emoji: "🧑", color: "#e8a4b8", photo: "" },
+    { id: "t2", name: "Lena",  emoji: "👧", color: "#6ba3c7", photo: "" },
+    { id: "t3", name: "Elias", emoji: "👦", color: "#7ed987", photo: "" },
+    { id: "t4", name: "Mia",   emoji: "👩", color: "#e8a555", photo: "" },
+    { id: "t5", name: "Jonas", emoji: "🧒", color: "#b98ce8", photo: "" }
   ],
 
   // ═══════════════════════════════════════════════════════
@@ -45,7 +46,7 @@ window.TeensContent = {
         photoUrl: "https://via.placeholder.com/400x400/7ed987/fff?text=Foto+3",     answer: "t3" },
 
       // --- ohne Foto: ein Satz/Fakt wird eingeblendet ---
-      { q: "„Ich wollte als Kind unbedingt Feuerwehrmann werden.“ — Welcher Teen war das?", answer: "t4" },
+      { q: "„Ich wollte als Kind unbedingt Feuerwehrfrau werden.“ — Welcher Teen war das?", answer: "t4" },
       { q: "„Mein erstes Wort war angeblich 'Ball'.“ — Welcher Teen?",                       answer: "t5" },
       { q: "Welcher Teen ist am längsten schon in der Gruppe dabei?",                        answer: "t1" },
       { q: "Welcher Teen kann am besten Fussball jonglieren?",                               answer: "t3" }
