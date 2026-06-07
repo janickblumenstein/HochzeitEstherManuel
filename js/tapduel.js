@@ -1,4 +1,5 @@
-// === tapduel.js – Zwischenspiel: Tap-Duell Braut vs. Bräutigam ===
+// === tapduel.js – Zwischenspiel: Tap-Duell aller Fan-Teams ===
+// Gewinner = Team mit dem höchsten Schnitt PRO PERSON (Teamgrösse egal).
 const A = window.App, { db, ref, set, onValue, update, get, remove, $, toast } = A;
 
 const DURATION_SEC = 15;
@@ -17,11 +18,8 @@ A.listeners.onReady = ()=>{
       A.switchTab("Game");
     } else {
       if (currentPhase !== null) {
-        if (A.isHost) {
-          A.switchTab("Host");
-        } else if (!A.isBeamer) {
-          A.switchTab("Score");
-        }
+        if (A.isHost) A.switchTab("Host");
+        else if (!A.isBeamer) A.switchTab("Score");
       }
       currentPhase = null;
     }
@@ -37,7 +35,6 @@ A.listeners.onReady = ()=>{
 
     if (A.isHost && d) {
       if (hostTimer) clearTimeout(hostTimer);
-
       if (d.phase === "countdown") {
         const left = Math.max(0, d.startsAt - Date.now());
         hostTimer = setTimeout(() => {
@@ -49,9 +46,7 @@ A.listeners.onReady = ()=>{
       else if (d.phase === "running") {
         const left = Math.max(0, d.endsAt - Date.now());
         hostTimer = setTimeout(() => {
-          if(A.state.tapduel?.phase === "running") {
-            finishTapDuel();
-          }
+          if(A.state.tapduel?.phase === "running") finishTapDuel();
         }, left);
       }
     }
@@ -82,6 +77,19 @@ async function startTapDuel(){
   toast("⚡ Tap-Duell: Los in 3 Sek!");
 }
 
+// Aggregiert Taps zu { teamId: { sum, n, avg } } über alle Teams
+function aggregate(taps){
+  const ts = {};
+  A.allTeams().forEach(t => ts[t.id] = { sum: 0, n: 0, avg: 0 });
+  for(const [p, c] of Object.entries(taps || {})){
+    const team = (A.players[p] || {}).team;
+    if(!team || !ts[team]) continue;
+    ts[team].sum += c; ts[team].n++;
+  }
+  Object.values(ts).forEach(s => s.avg = s.n > 0 ? s.sum / s.n : 0);
+  return ts;
+}
+
 async function finishTapDuel() {
   if (!A.isHost) return;
   const snap = await get(ref(db, `rooms/${A.room}/tapduel`));
@@ -90,24 +98,22 @@ async function finishTapDuel() {
 
   const taps = d.taps || {};
   const players = A.players || {};
-  const teamStats = { braut: { sum: 0, n: 0 }, braeutigam: { sum: 0, n: 0 } };
+  const teamStats = aggregate(taps);
   const tappers = [];
-
   for (const [uid, count] of Object.entries(taps)) {
     const p = players[uid];
-    if (p && count > 0) {
-      teamStats[p.team].sum += count;
-      teamStats[p.team].n++;
-      tappers.push({ uid, name: p.name || uid.split('_')[0], count, team: p.team });
-    }
+    if (p && count > 0) tappers.push({ uid, name: p.name || uid.split('_')[0], count, team: p.team });
   }
 
-  for (const k of ["braut", "braeutigam"]) {
-    teamStats[k].avg = teamStats[k].n > 0 ? teamStats[k].sum / teamStats[k].n : 0;
-  }
-
-  const winner = teamStats.braut.avg > teamStats.braeutigam.avg ? "braut" :
-                 teamStats.braeutigam.avg > teamStats.braut.avg ? "braeutigam" : null;
+  // Gewinner = höchster Schnitt pro Person (Gleichstand → keiner)
+  let winner = null, best = -1, tie = false;
+  A.allTeams().forEach(t=>{
+    const s = teamStats[t.id];
+    if(s.n === 0) return;
+    if(s.avg > best){ best = s.avg; winner = t.id; tie = false; }
+    else if(s.avg === best){ tie = true; }
+  });
+  if(tie) winner = null;
 
   if (winner) {
     const tRef = ref(db, `rooms/${A.room}/teams/${winner}`);
@@ -115,24 +121,16 @@ async function finishTapDuel() {
     await set(tRef, cur + 1);
   }
 
-  // Faire Punkteverteilung für Top-Tapper
+  // Punkte für die schnellsten Finger
   tappers.sort((a, b) => b.count - a.count);
-
   const topTappers = [];
   const points = [10, 5, 3];
   let currentRank = 0;
   let lastCount = tappers.length > 0 ? tappers[0].count : -1;
-
-  // ── BATCH: Score-Deltas akkumulieren, dann ein einziges update() ──────
   const scoreDeltas = {};
-
   for (let i = 0; i < tappers.length; i++) {
-    if (tappers[i].count < lastCount) {
-      currentRank++;
-      lastCount = tappers[i].count;
-    }
+    if (tappers[i].count < lastCount) { currentRank++; lastCount = tappers[i].count; }
     if (currentRank > 2) break;
-
     const pts = points[currentRank];
     scoreDeltas[tappers[i].uid] = pts;
     tappers[i].pts = pts;
@@ -146,40 +144,29 @@ async function finishTapDuel() {
     }
     await update(ref(db, `rooms/${A.room}/players`), scoreUpdates);
   }
-  // ─────────────────────────────────────────────────────────────────────
 
-  await update(ref(db, `rooms/${A.room}/tapduel`), {
-    phase: "done",
-    teamStats, winner, topTappers
-  });
+  await update(ref(db, `rooms/${A.room}/tapduel`), { phase: "done", teamStats, winner, topTappers });
 }
 
 function render(){
   const d = A.state.tapduel;
   const panel = $("tapPanel"), wait = $("gameWait"), gamePanel = $("gamePanel");
-  if(!d){
-    panel.classList.add("hidden");
-    return;
-  }
+  if(!d){ panel.classList.add("hidden"); return; }
 
   panel.classList.remove("hidden");
   wait.classList.add("hidden");
   gamePanel.classList.add("hidden");
 
   const body = $("tapBody");
-  const m = A.meta || {};
-  const nameB = m.braut || "Braut";
-  const nameBr = m.braeutigam || "Bräutigam";
   const myTeam = A.team;
   const myCount = ((d.taps || {})[A.user]) || 0;
 
   if(d.phase === "countdown"){
     const left = Math.max(0, Math.ceil((d.startsAt - Date.now()) / 1000));
     body.innerHTML = `<div class="q-big">⚡ Tap-Duell!</div>
-      <div class="sub" style="text-align:center">Team ${nameB} vs Team ${nameBr}<br>Gleich geht's los — tippt so schnell ihr könnt!</div>
+      <div class="sub" style="text-align:center">Gleich geht's los — tippt so schnell ihr könnt!</div>
       <div class="tap-count">${left}</div>
       <div class="sub" style="text-align:center">Team mit den meisten Taps pro Person gewinnt 1 Rundensieg</div>`;
-
     A.clearTimers();
     A.timers.push(setInterval(render, 250));
     return;
@@ -190,38 +177,26 @@ function render(){
     const leftSec = Math.ceil(leftMs / 1000);
     const pct = (leftMs / (DURATION_SEC * 1000)) * 100;
     const isHost = A.isHost;
-    const teamClass = myTeam || "braut";
-    const teamLabel = myTeam === "braut" ? `👰 ${nameB}` : myTeam === "braeutigam" ? `🤵 ${nameBr}` : "(Host)";
+    const tcol = A.teamColor(myTeam);
+    const teamLabel = myTeam ? `${A.teamEmoji(myTeam)} ${A.teamName(myTeam)}` : "(Host)";
 
     let html = `<div class="q-big">⚡ GO GO GO!</div>
       <div class="timer-num" id="tapTimer">${leftSec}s</div>
       <div class="timer-bar"><div class="fill" id="tapTimerBar" style="width:${pct}%"></div></div>`;
 
     if(isHost){
-      const taps = d.taps || {};
-      const ts = { braut: { sum:0, n:0 }, braeutigam: { sum:0, n:0 } };
-      for(const [p, c] of Object.entries(taps)){
-        const t = (A.players[p] || {}).team;
-        if(!t || !ts[t]) continue;
-        ts[t].sum += c; ts[t].n++;
-      }
-      const avgB = ts.braut.n ? (ts.braut.sum / ts.braut.n).toFixed(1) : "0";
-      const avgBr = ts.braeutigam.n ? (ts.braeutigam.sum / ts.braeutigam.n).toFixed(1) : "0";
-      html += `<div class="team-board">
-        <div class="team-card braut">
-          <div class="nm">👰 ${nameB}</div>
-          <div class="pts">${ts.braut.sum}</div>
-          <div class="pts-sub">Ø ${avgB} pro Person</div>
-        </div>
-        <div class="team-card braeutigam">
-          <div class="nm">🤵 ${nameBr}</div>
-          <div class="pts">${ts.braeutigam.sum}</div>
-          <div class="pts-sub">Ø ${avgBr} pro Person</div>
-        </div>
-      </div>`;
+      const ts = aggregate(d.taps);
+      html += `<div class="team-board">` + A.allTeams().map(t=>{
+        const s = ts[t.id];
+        return `<div class="team-card" style="--tcol:${t.color}">
+          <div class="nm">${t.emoji} ${t.name}</div>
+          <div class="pts" style="color:${t.color}">${s.sum}</div>
+          <div class="pts-sub">Ø ${s.avg.toFixed(1)} pro Person</div>
+        </div>`;
+      }).join("") + `</div>`;
     } else {
-      html += `<div class="tap-count ${teamClass}">${myCount}</div>
-        <button class="tap-btn btn-${teamClass}" id="tapBtn">TAP! ${teamLabel}</button>`;
+      html += `<div class="tap-count" style="color:${tcol}">${myCount}</div>
+        <button class="tap-btn teen-btn" style="--tcol:${tcol};font-size:2rem;padding:50px 20px" id="tapBtn">TAP! ${teamLabel}</button>`;
     }
 
     body.innerHTML = html;
@@ -250,7 +225,6 @@ function render(){
           pending = false;
         }, 1000);
       };
-
       btn.onclick = ()=>{
         if(Date.now() >= d.endsAt) return;
         localCount++;
@@ -263,25 +237,19 @@ function render(){
   }
 
   if(d.phase === "done"){
-    const ts = d.teamStats || { braut: {}, braeutigam: {} };
+    const ts = d.teamStats || {};
     const winner = d.winner;
-    const wName = winner === "braut" ? nameB : winner === "braeutigam" ? nameBr : null;
     let html = `<div class="q-big">⚡ Tap-Duell beendet!</div>`;
-
-    html += `<div class="team-board">
-      <div class="team-card braut ${winner==="braut"?"team-winning":""}">
-        <div class="nm">👰 ${nameB}</div>
-        <div class="pts">${(ts.braut.avg||0).toFixed(1)}</div>
+    html += `<div class="team-board">` + A.allTeams().map(t=>{
+      const s = ts[t.id] || {};
+      const win = winner === t.id;
+      return `<div class="team-card ${win?'team-winning':''}" style="--tcol:${t.color}">
+        <div class="nm">${t.emoji} ${t.name}</div>
+        <div class="pts" style="color:${t.color}">${(s.avg||0).toFixed(1)}</div>
         <div class="pts-sub">Ø Taps pro Person</div>
-        <div class="mem">(${ts.braut.sum||0} insgesamt, ${ts.braut.n||0} Teilnehmer)</div>
-      </div>
-      <div class="team-card braeutigam ${winner==="braeutigam"?"team-winning":""}">
-        <div class="nm">🤵 ${nameBr}</div>
-        <div class="pts">${(ts.braeutigam.avg||0).toFixed(1)}</div>
-        <div class="pts-sub">Ø Taps pro Person</div>
-        <div class="mem">(${ts.braeutigam.sum||0} insgesamt, ${ts.braeutigam.n||0} Teilnehmer)</div>
-      </div>
-    </div>`;
+        <div class="mem">(${s.sum||0} total, ${s.n||0} dabei)</div>
+      </div>`;
+    }).join("") + `</div>`;
 
     if (d.topTappers && d.topTappers.length > 0) {
       html += `<h3 style="text-align:center;margin-top:24px;color:var(--gold)">🔥 Die schnellsten Finger</h3>`;
@@ -298,9 +266,10 @@ function render(){
       });
     }
 
-    if(wName){
+    if(winner){
+      const t = A.teamById(winner) || {};
       html += `<div class="flash gold" style="text-align:center;font-size:1.05rem;margin-top:14px">
-        🏆 Rundensieg für Team ${winner==="braut"?"👰":"🤵"} <b>${wName}</b>!
+        🏆 Rundensieg für ${t.emoji||''} <b>${t.name||winner}</b>!
       </div>`;
     } else {
       html += `<div class="flash">Unentschieden – keiner kriegt den Punkt</div>`;
@@ -311,11 +280,10 @@ function render(){
     }
 
     body.innerHTML = html;
-
     const cl = $("tapClose");
     if(cl) cl.onclick = ()=>remove(ref(db, `rooms/${A.room}/tapduel`));
     A.clearTimers();
   }
 }
 
-console.log("✅ tapduel.js loaded");
+console.log("✅ tapduel.js loaded (Teens)");

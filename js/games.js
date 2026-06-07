@@ -1,20 +1,22 @@
-// === games.js – Quiz-Runner mit Sets, Timer und fairer Team-Wertung ===
+// === games.js – Quiz-Runner: "Welcher Teen ist das?" + Schätzfragen ===
+// Team-Wertung ist RELATIV (Trefferquote in %), nie absolut → kein
+// Popularitäts-Contest, Teamgrösse egal. Auch das neutrale Team spielt mit.
 const A = window.App, { db, ref, set, onValue, update, get, remove, $, toast, shuffle } = A;
 
 const prevReady = A.listeners.onReady;
 A.listeners.onReady = ()=>{
   if(prevReady) prevReady();
-  
+
   onValue(ref(db, `rooms/${A.room}/quiz`), snap=>{
     A.state.quiz = snap.val();
     renderHostStatus();
   });
-  
+
   onValue(ref(db, `rooms/${A.room}/game`), snap => {
     const prevGame = A.state.game;
     const newGame = snap.val();
     A.state.game = newGame;
-    
+
     const isNewQuestionOrPhase = newGame && (!prevGame || prevGame.q !== newGame.q || prevGame.phase !== newGame.phase);
     const myPrevAns = (prevGame && prevGame.answers) ? prevGame.answers[A.user] : undefined;
     const myNewAns = (newGame && newGame.answers) ? newGame.answers[A.user] : undefined;
@@ -32,7 +34,7 @@ A.listeners.onReady = ()=>{
     renderHostStatus();
     maybeStartClientTimer();
   });
-  
+
   bindHostUI();
   populateSetDropdown();
 };
@@ -51,7 +53,7 @@ function updateLiveCounter(g) {
 // ═══════════════════════════════════════════════════════════
 function populateSetDropdown(){
   const sel = $("setSel"); if(!sel) return;
-  const sets = (window.HochzeitContent || {}).sets || [];
+  const sets = (window.TeensContent || {}).sets || [];
   sel.innerHTML = sets.map(s=>`<option value="${s.id}">${s.label}</option>`).join("");
 }
 
@@ -107,7 +109,7 @@ async function startSelectedSet(){
   await remove(ref(db, `rooms/${A.room}/tapduel`));
 
   const setId = $("setSel").value;
-  const sets = (window.HochzeitContent || {}).sets || [];
+  const sets = (window.TeensContent || {}).sets || [];
   const setDef = sets.find(s=>s.id === setId);
   if(!setDef) return toast("Set nicht gefunden");
 
@@ -131,59 +133,27 @@ async function startSelectedSet(){
 }
 
 function buildQuestionList(pick){
-  const pool = (window.HochzeitContent || {}).questions || {};
+  const pool = (window.TeensContent || {}).questions || {};
   const out = [];
-  
+
   for(const [type, amount] of Object.entries(pick)){
     if(type === "random"){
       const all = [];
-      // Definiere die erlaubten Kategorien für "random"
-      const allowedTypes = ["who", "prognose"];
-      
-      for(const t of allowedTypes){
-        const arr = pool[t] || [];
-        arr.forEach(q => all.push({ ...q, type: t }));
+      for(const [t, arr] of Object.entries(pool)){
+        (arr || []).forEach(q => all.push({ ...q, type: t }));
       }
-      
-      // Schneidet die Liste einfach auf die gewünschte Menge ab, ohne zu mischen
-      const picked = all.slice(0, amount);
-      out.push(...picked);
-      
+      out.push(...shuffle(all).slice(0, amount));
     } else {
       const arr = pool[type] || [];
       if(amount === "all"){
         out.push(...arr.map(q => ({ ...q, type })));
       } else {
-        // Zieht die ersten X Fragen, ohne zu mischen
         out.push(...arr.slice(0, amount).map(q => ({ ...q, type })));
       }
     }
   }
   return out;
 }
-/*
-function buildQuestionList(pick){
-  const pool = (window.HochzeitContent || {}).questions || {};
-  const out = [];
-  for(const [type, amount] of Object.entries(pick)){
-    if(type === "random"){
-      const all = [];
-      for(const [t, arr] of Object.entries(pool)){
-        (arr || []).forEach(q=>all.push({ ...q, type: t }));
-      }
-      const picked = shuffle(all).slice(0, amount);
-      out.push(...picked);
-    } else {
-      const arr = pool[type] || [];
-      if(amount === "all"){
-        out.push(...arr.map(q=>({ ...q, type })));
-      } else {
-        out.push(...shuffle(arr).slice(0, amount).map(q=>({ ...q, type })));
-      }
-    }
-  }
-  return out;
-}*/
 
 async function loadQuestion(idx){
   if(!A.isHost) return;
@@ -205,8 +175,6 @@ async function loadQuestion(idx){
   if(qData.answer !== undefined) game.answer = qData.answer;
   if(qData.photoUrl) game.photoUrl = qData.photoUrl;
   if(qData.unit !== undefined) game.unit = qData.unit;
-  if(qData.optA) game.optA = qData.optA;
-  if(qData.optB) game.optB = qData.optB;
 
   await set(ref(db, `rooms/${A.room}/game`), game);
   await update(ref(db, `rooms/${A.room}/quiz`), { current: idx });
@@ -266,7 +234,6 @@ function maybeStartClientTimer(){
     updateTimerDisplay(left, g.endsAt - g.startedAt);
     if(left <= 0){
       A.clearTimers();
-      // Kein Auto-Reveal – Host entscheidet manuell
       const num = document.getElementById("timerNum");
       if(num) num.innerText = "⏳";
     }
@@ -323,7 +290,7 @@ function renderGame(){
   }
   html += `<div class="q-big">${g.q}</div>`;
 
-  if(g.type === "photo" && g.photoUrl){
+  if(g.type === "guess" && g.photoUrl){
     html += `<div class="photo-box"><img src="${g.photoUrl}" alt="" onerror="this.parentElement.innerHTML='<div class=&quot;ph&quot;>📷</div>'"></div>`;
   }
 
@@ -358,28 +325,19 @@ function renderGame(){
 }
 
 function labelForAnswer(g, ans){
-  const m = A.meta || {};
-  if(g.type === "who" || g.type === "photo" || g.type === "prognose"){
-    return ans === "braut" ? (m.braut || "Braut") : (m.braeutigam || "Bräutigam");
-  }
-  if(g.type === "family"){ return ans === "a" ? g.optA : g.optB; }
-  if(g.type === "estimate"){ return g.unit ? `${ans} ${g.unit}` : String(ans); }
+  if(g.type === "guess") return A.teamName(ans);
+  if(g.type === "estimate") return g.unit ? `${ans} ${g.unit}` : String(ans);
   return String(ans);
 }
 
 function buildAnswerInput(g){
-  const m = A.meta || {};
-  if(g.type === "who" || g.type === "photo" || g.type === "prognose"){
-    return `<div class="grid2" style="margin-top:16px">
-      <button class="btn-braut" data-send="braut" style="padding:22px;font-size:1rem">👰<br>${m.braut || "Braut"}</button>
-      <button class="btn-braeutigam" data-send="braeutigam" style="padding:22px;font-size:1rem">🤵<br>${m.braeutigam || "Bräutigam"}</button>
-    </div>`;
-  }
-  if(g.type === "family"){
-    return `<div class="grid2" style="margin-top:16px">
-      <button class="btn-braut" data-send="a" style="padding:22px;font-size:1rem">${g.optA}</button>
-      <button class="btn-braeutigam" data-send="b" style="padding:22px;font-size:1rem">${g.optB}</button>
-    </div>`;
+  if(g.type === "guess"){
+    // Ein Button pro Teen (das neutrale Team ist keine Antwortmöglichkeit)
+    const btns = A.teensOnly().map(t => `
+      <button class="teen-btn" data-send="${t.id}" style="--tcol:${t.color}">
+        <span class="te">${t.emoji}</span>${t.name}
+      </button>`).join("");
+    return `<div class="teen-grid" style="margin-top:16px">${btns}</div>`;
   }
   if(g.type === "estimate"){
     return `<input id="estInp" type="number" step="any" placeholder="Deine Schätzung${g.unit?' ('+g.unit+')':''}" autofocus>
@@ -405,9 +363,8 @@ function wireAnswerInputs(g){
 }
 
 // ═══════════════════════════════════════════════════════════
-// AUFLÖSUNG – BATCH-SCORE-UPDATE für 80+ Gäste
-// Statt N einzelner get+set-Aufrufe: alle Punkte berechnen,
-// dann ein einziges update() an Firebase schicken.
+// AUFLÖSUNG – Batch-Score-Update für viele Gäste
+// teamStats pro Team (Teens + neutral); Rundensieg = höchste QUOTE.
 // ═══════════════════════════════════════════════════════════
 async function revealCurrent() {
   if (!A.isHost) return;
@@ -416,25 +373,23 @@ async function revealCurrent() {
 
   const answers = g.answers || {};
   const players = A.players || {};
+  const teamIds = A.allTeams().map(t => t.id);
 
-  const teamStats = {
-    braut: { correct: 0, total: 0, rate: 0 },
-    braeutigam: { correct: 0, total: 0, rate: 0 }
-  };
-  const breakdown = { braut: 0, braeutigam: 0, a: 0, b: 0 };
+  // teamStats: für jedes Team correct/total/rate
+  const teamStats = {};
+  teamIds.forEach(id => teamStats[id] = { correct: 0, total: 0, rate: 0 });
+  // breakdown: wie oft wurde welcher Teen getippt (Antwort-Verteilung)
+  const breakdown = {};
   const ranking = [];
 
-  // Akkumulator: uid -> zu vergebende Punkte (kein Firebase-Read pro Spieler)
   const scoreDeltas = {};
-  const addScore = (uid, pts) => {
-    scoreDeltas[uid] = (scoreDeltas[uid] || 0) + pts;
-  };
+  const addScore = (uid, pts) => { scoreDeltas[uid] = (scoreDeltas[uid] || 0) + pts; };
 
   for (const [uid, ans] of Object.entries(answers)) {
     const p = players[uid];
     if (!p) continue;
     breakdown[ans] = (breakdown[ans] || 0) + 1;
-    if (p.team === "braut" || p.team === "braeutigam") teamStats[p.team].total++;
+    if (p.team && teamStats[p.team]) teamStats[p.team].total++;
 
     if (g.type === "estimate") {
       const diff = Math.abs(ans - g.answer);
@@ -445,37 +400,12 @@ async function revealCurrent() {
   let winner = null;
   let finalCorrectAnswer = g.answer;
 
-  // 1. EHE-PROGNOSE
-  if (g.type === "prognose") {
-    if (breakdown.braut > breakdown.braeutigam) finalCorrectAnswer = "braut";
-    else if (breakdown.braeutigam > breakdown.braut) finalCorrectAnswer = "braeutigam";
-    else finalCorrectAnswer = "tie";
-
-    if (finalCorrectAnswer !== "tie") {
-      for (const [uid, ans] of Object.entries(answers)) {
-        if (ans === finalCorrectAnswer) {
-          const p = players[uid];
-          if (p) {
-            if (p.team === "braut" || p.team === "braeutigam") teamStats[p.team].correct++;
-            addScore(uid, 1);
-          }
-        }
-      }
-      for (const k of ["braut", "braeutigam"]) {
-        teamStats[k].rate = teamStats[k].total > 0 ? (teamStats[k].correct / teamStats[k].total) : 0;
-      }
-      if (teamStats.braut.rate > teamStats.braeutigam.rate) winner = "braut";
-      else if (teamStats.braeutigam.rate > teamStats.braut.rate) winner = "braeutigam";
-    }
-  }
-  // 2. SCHÄTZFRAGEN
-  else if (g.type === "estimate") {
+  if (g.type === "estimate") {
+    // ── SCHÄTZFRAGE: Top 3 punkten, Rundensieg = Team des Siegers ──
     ranking.sort((a, b) => a.diff - b.diff);
-
     let currentPts = 3;
     let lastDiff = ranking.length > 0 ? ranking[0].diff : -1;
     let rankPosition = 0;
-
     for (let i = 0; i < ranking.length; i++) {
       if (ranking[i].diff > lastDiff) {
         rankPosition++;
@@ -486,37 +416,36 @@ async function revealCurrent() {
       addScore(ranking[i].uid, currentPts);
       ranking[i].awardedPts = currentPts;
     }
-
     if (ranking.length > 0) {
       const bestDiff = ranking[0].diff;
       const topWinners = ranking.filter(r => r.diff === bestDiff);
-      const brautWinners = topWinners.filter(r => r.team === "braut").length;
-      const braeutigamWinners = topWinners.filter(r => r.team === "braeutigam").length;
-      if (brautWinners > braeutigamWinners) winner = "braut";
-      else if (braeutigamWinners > brautWinners) winner = "braeutigam";
-      else winner = null;
+      // Team mit den meisten Top-Tippern gewinnt die Runde (Gleichstand → keiner)
+      const byTeam = {};
+      topWinners.forEach(r => { if(r.team) byTeam[r.team] = (byTeam[r.team]||0)+1; });
+      winner = pickMax(byTeam);
     }
-  }
-  // 3. NORMALES QUIZ (who / photo / family)
-  else {
+  } else {
+    // ── RATEN ("Welcher Teen?"): richtig wenn ans === g.answer ──
     for (const [uid, ans] of Object.entries(answers)) {
       if (ans === g.answer) {
         const p = players[uid];
         if (p) {
-          if (p.team === "braut" || p.team === "braeutigam") teamStats[p.team].correct++;
+          if (p.team && teamStats[p.team]) teamStats[p.team].correct++;
           addScore(uid, 1);
         }
       }
     }
-    for (const k of ["braut", "braeutigam"]) {
-      teamStats[k].rate = teamStats[k].total > 0 ? (teamStats[k].correct / teamStats[k].total) : 0;
-    }
-    if (teamStats.braut.rate > teamStats.braeutigam.rate) winner = "braut";
-    else if (teamStats.braeutigam.rate > teamStats.braut.rate) winner = "braeutigam";
+    // Rundensieg = höchste TREFFERQUOTE (relativ, Teamgrösse egal)
+    const rates = {};
+    teamIds.forEach(id => {
+      const ts = teamStats[id];
+      ts.rate = ts.total > 0 ? ts.correct / ts.total : 0;
+      if (ts.total > 0) rates[id] = ts.rate;
+    });
+    winner = pickMaxStrict(rates);
   }
 
-  // ── BATCH: alle Punkte in einem einzigen Firebase-Update ──────────────
-  // Anstatt 80× get+set → 1× update mit allen neuen Werten
+  // ── BATCH: alle Punkte in einem einzigen Firebase-Update ──
   if (Object.keys(scoreDeltas).length > 0) {
     const scoreUpdates = {};
     for (const [uid, delta] of Object.entries(scoreDeltas)) {
@@ -524,7 +453,6 @@ async function revealCurrent() {
     }
     await update(ref(db, `rooms/${A.room}/players`), scoreUpdates);
   }
-  // ─────────────────────────────────────────────────────────────────────
 
   if (winner) {
     const tRef = ref(db, `rooms/${A.room}/teams/${winner}`);
@@ -539,10 +467,23 @@ async function revealCurrent() {
   });
 }
 
+// Höchster Wert; bei Gleichstand an der Spitze → null (kein Sieger)
+function pickMaxStrict(obj){
+  const entries = Object.entries(obj);
+  if(!entries.length) return null;
+  let best = -Infinity, who = null, tie = false;
+  for(const [k,v] of entries){
+    if(v > best){ best = v; who = k; tie = false; }
+    else if(v === best){ tie = true; }
+  }
+  return tie ? null : who;
+}
+function pickMax(obj){ return pickMaxStrict(obj); }
+
+// ═══════════════════════════════════════════════════════════
+// AUFLÖSUNGS-ANSICHT (Spieler)
+// ═══════════════════════════════════════════════════════════
 function buildRevealView(g){
-  const m = A.meta || {};
-  const nameB = m.braut || "Braut";
-  const nameBr = m.braeutigam || "Bräutigam";
   const r = g.result || {};
   let html = "";
 
@@ -551,23 +492,13 @@ function buildRevealView(g){
     if (g.type === "estimate") {
        const myEntry = (r.ranking || []).find(e => e.uid === A.user);
        if (myEntry && myEntry.awardedPts) {
-         html += `<div class="flash gold" style="text-align:center;font-size:1.1rem;box-shadow:0 4px 15px rgba(212,175,55,0.3)">🎉 Stark geschätzt! Du holst <b>+${myEntry.awardedPts} Punkte</b>!</div>`;
+         html += `<div class="flash gold" style="text-align:center;font-size:1.1rem">🎉 Stark geschätzt! Du holst <b>+${myEntry.awardedPts} Punkte</b>!</div>`;
        } else if (myAns !== undefined) {
-         html += `<div class="flash" style="text-align:center">Guter Versuch, aber leider nicht in den Punkterängen.</div>`;
-       }
-    } else if (g.type === "prognose") {
-       if (g.answer === "tie") {
-         html += `<div class="flash" style="text-align:center">Gleichstand! Das Orakel ist unentschlossen – niemand punktet.</div>`;
-       } else if (myAns === g.answer) {
-         html += `<div class="flash gold" style="text-align:center;font-size:1.1rem;box-shadow:0 4px 15px rgba(78,207,106,0.3)">🎉 Du bist mit der Mehrheit! <b>+1 Punkt</b>!</div>`;
-       } else if (myAns !== undefined) {
-         html += `<div class="flash warn" style="text-align:center;font-size:1.1rem">❌ Du lagst daneben!</div>`;
-       } else {
-         html += `<div class="flash" style="text-align:center;opacity:.7">Du hast nicht abgestimmt.</div>`;
+         html += `<div class="flash" style="text-align:center">Guter Versuch, aber nicht in den Punkterängen.</div>`;
        }
     } else {
        if (myAns === g.answer) {
-         html += `<div class="flash gold" style="text-align:center;font-size:1.1rem;box-shadow:0 4px 15px rgba(78,207,106,0.3)">🎉 Richtig! <b>+1 Punkt</b> für dich!</div>`;
+         html += `<div class="flash gold" style="text-align:center;font-size:1.1rem">🎉 Richtig! <b>+1 Punkt</b> für dich!</div>`;
        } else if (myAns !== undefined) {
          html += `<div class="flash warn" style="text-align:center;font-size:1.1rem">❌ Leider falsch!</div>`;
        } else {
@@ -576,78 +507,43 @@ function buildRevealView(g){
     }
   }
 
-  if(g.type === "who" || g.type === "photo" || g.type === "family"){
-    const correctLabel = g.type === "family" ? (g.answer === "a" ? g.optA : g.optB) :
-                         (g.answer === "braut" ? nameB : nameBr);
-    html += `<div class="flash gold"><b>✓ Richtige Antwort:</b> ${correctLabel}</div>`;
-    const counts = r.breakdown || {};
-    if(g.type === "family"){
-      const a = counts["a"] || 0, b = counts["b"] || 0;
-      const total = a + b || 1;
-      html += `<div class="result-bar">
-        <div class="rb braut" style="width:${a/total*100}%">${a > 0 ? a : ''}</div>
-        <div class="rb braeutigam" style="width:${b/total*100}%">${b > 0 ? b : ''}</div>
-      </div>
-      <div class="row" style="font-size:.75rem;opacity:.7"><span>${g.optA} (${a})</span><span style="text-align:right">${g.optB} (${b})</span></div>`;
-    } else {
-      const a = counts["braut"] || 0, b = counts["braeutigam"] || 0;
-      const total = a + b || 1;
-      html += `<div class="result-bar">
-        <div class="rb braut" style="width:${a/total*100}%">${a > 0 ? a : ''}</div>
-        <div class="rb braeutigam" style="width:${b/total*100}%">${b > 0 ? b : ''}</div>
-      </div>
-      <div class="row" style="font-size:.75rem;opacity:.7"><span>👰 ${nameB} (${a})</span><span style="text-align:right">${nameBr} 🤵 (${b})</span></div>`;
-    }
+  if(g.type === "guess"){
+    const correct = A.teamById(g.answer) || {};
+    html += `<div class="flash gold"><b>✓ Richtig:</b> ${correct.emoji||''} ${correct.name||g.answer}</div>`;
+    html += buildDistribution(r.breakdown || {}, g.answer);
     if(r.teamStats){
-      const ts = r.teamStats;
-      html += `<h3>Trefferquote:</h3>
-        <div class="score-row">
-          <span>👰 ${nameB}</span>
-          <strong>${ts.braut.correct}/${ts.braut.total} (${(ts.braut.rate*100).toFixed(0)}%)</strong>
-        </div>
-        <div class="score-row">
-          <span>🤵 ${nameBr}</span>
-          <strong>${ts.braeutigam.correct}/${ts.braeutigam.total} (${(ts.braeutigam.rate*100).toFixed(0)}%)</strong>
+      html += `<h3>Trefferquote pro Fan-Team:</h3>`;
+      A.allTeams().forEach(t=>{
+        const ts = r.teamStats[t.id]; if(!ts || ts.total === 0) return;
+        const win = r.roundWinner === t.id;
+        html += `<div class="score-row ${win?'me':''}">
+          <span><span class="tm" style="background:${t.color}">${t.emoji}</span>${t.name}</span>
+          <strong>${ts.correct}/${ts.total} (${(ts.rate*100).toFixed(0)}%)</strong>
         </div>`;
+      });
     }
   }
   else if(g.type === "estimate"){
     html += `<div class="flash gold"><b>✓ Richtige Antwort:</b> ${g.answer}${g.unit ? ' ' + g.unit : ''}</div>`;
     if(r.ranking && r.ranking.length){
       html += `<h3>Näher dran – besser:</h3>`;
-      r.ranking.forEach((e) => {
+      r.ranking.slice(0, 8).forEach((e) => {
         let medal = "🔹";
         if (e.awardedPts === 3) medal = "🥇";
         if (e.awardedPts === 2) medal = "🥈";
         if (e.awardedPts === 1) medal = "🥉";
         const ptsStr = e.awardedPts ? `+${e.awardedPts}` : '';
-        const tmIcon = e.team === "braut" ? "👰" : "🤵";
-        html += `<div class="score-row"><span>${medal} ${tmIcon} ${e.p}: ${e.v}${g.unit?' '+g.unit:''} <span class="sub">(Δ ${e.diff.toFixed(1)})</span></span><strong>${ptsStr}</strong></div>`;
+        html += `<div class="score-row"><span><span class="tm" style="background:${A.teamColor(e.team)}">${A.teamEmoji(e.team)}</span>${medal} ${e.p}: ${e.v}${g.unit?' '+g.unit:''} <span class="sub">(Δ ${e.diff.toFixed(1)})</span></span><strong>${ptsStr}</strong></div>`;
       });
     } else {
       html += `<div class="flash warn">Niemand hat geantwortet</div>`;
     }
   }
-  else if(g.type === "prognose"){
-    const counts = r.breakdown || { braut: 0, braeutigam: 0 };
-    const total = (counts.braut || 0) + (counts.braeutigam || 0) || 1;
-    if (g.answer === "tie") {
-      html += `<div class="flash rose">💍 Das Orakel sagt: Unentschieden!</div>`;
-    } else {
-      html += `<div class="flash rose">💍 Das Orakel hat entschieden:</div>`;
-    }
-    html += `<div class="result-bar">
-      <div class="rb braut" style="width:${counts.braut/total*100}%">${counts.braut}</div>
-      <div class="rb braeutigam" style="width:${counts.braeutigam/total*100}%">${counts.braeutigam}</div>
-    </div>
-    <div class="row" style="font-size:.75rem;opacity:.7"><span>👰 ${nameB}</span><span style="text-align:right">${nameBr} 🤵</span></div>`;
-  }
 
   if(r.roundWinner){
-    const wName = r.roundWinner === "braut" ? nameB : nameBr;
-    const wIcon = r.roundWinner === "braut" ? "👰" : "🤵";
+    const t = A.teamById(r.roundWinner) || {};
     html += `<div class="flash gold" style="text-align:center;font-size:1.05rem;margin-top:14px">
-      🏆 Rundensieg für Team ${wIcon} <b>${wName}</b>!
+      🏆 Rundensieg für ${t.emoji||''} <b>${t.name||r.roundWinner}</b>!
     </div>`;
   } else {
     html += `<div class="flash" style="text-align:center">Unentschieden – keine Rundenpunkte</div>`;
@@ -656,38 +552,51 @@ function buildRevealView(g){
   return html;
 }
 
+// Antwort-Verteilung als gestapelter Balken über alle getippten Teens
+function buildDistribution(breakdown, correctId){
+  const teens = A.teensOnly();
+  const total = teens.reduce((s,t)=>s + (breakdown[t.id]||0), 0) || 1;
+  const segs = teens.map(t=>{
+    const c = breakdown[t.id] || 0;
+    const pct = c / total * 100;
+    if(pct === 0) return "";
+    const ring = t.id === correctId ? "box-shadow:inset 0 0 0 3px var(--gold)" : "";
+    return `<div class="rb" style="width:${pct}%;background:${t.color};color:#111;${ring}" title="${t.name}">${c>0?c:''}</div>`;
+  }).join("");
+  const legend = teens.filter(t=>breakdown[t.id]).map(t=>
+    `<span style="white-space:nowrap"><span class="dot" style="background:${t.color}"></span>${t.name} (${breakdown[t.id]||0})</span>`
+  ).join(" ");
+  return `<div class="result-bar">${segs}</div>
+    <div class="legend">${legend || '<span class="sub">Keine Antworten</span>'}</div>`;
+}
+
 function renderQuizSummary(){
-  const t = A.teams || { braut: 0, braeutigam: 0 };
-  const m = A.meta || {};
-  const nameB = m.braut || "Braut";
-  const nameBr = m.braeutigam || "Bräutigam";
+  const wins = A.teams || {};
+  const teamsSorted = A.allTeams().slice().sort((a,b)=>(wins[b.id]||0)-(wins[a.id]||0));
   const topPlayers = Object.entries(A.players || {})
     .sort((a,b)=>(b[1].score||0)-(a[1].score||0)).slice(0, 5);
-  const leadTeam = t.braut > t.braeutigam ? "braut" : t.braeutigam > t.braut ? "braeutigam" : null;
+  const maxWins = Math.max(0, ...teamsSorted.map(t=>wins[t.id]||0));
 
   let html = `<div class="q-big">🏁 Quiz beendet!</div>`;
-  html += `<h3>Gesamt-Stand</h3>
-    <div class="team-board">
-      <div class="team-card braut ${leadTeam==="braut"?"team-winning":""}">
-        <div class="nm">👰 Team ${nameB}</div>
-        <div class="pts">${t.braut || 0}</div>
-        <div class="pts-sub">Rundensiege</div>
-      </div>
-      <div class="team-card braeutigam ${leadTeam==="braeutigam"?"team-winning":""}">
-        <div class="nm">🤵 Team ${nameBr}</div>
-        <div class="pts">${t.braeutigam || 0}</div>
-        <div class="pts-sub">Rundensiege</div>
-      </div>
+  html += `<h3>Rundensiege der Fan-Teams</h3><div class="team-board">`;
+  html += teamsSorted.map(t=>{
+    const w = wins[t.id]||0;
+    const lead = w>0 && w===maxWins;
+    return `<div class="team-card ${lead?'team-winning':''}" style="--tcol:${t.color}">
+      <div class="nm">${t.emoji} ${t.name}</div>
+      <div class="pts" style="color:${t.color}">${w}</div>
+      <div class="pts-sub">Rundensiege</div>
     </div>`;
+  }).join("");
+  html += `</div>`;
   if(topPlayers.length){
     html += `<h3>Top-Tipper</h3>` + topPlayers.map(([n,d],i)=>{
       const medal = ['🥇','🥈','🥉'][i] || ((i+1)+'.');
-      const tm = d.team === "braut" ? "👰 B" : "🤵 Br";
       const displayName = d.name || n.split('_')[0];
-      return `<div class="score-row"><span><span class="tm ${d.team}">${tm}</span>${medal} ${displayName}</span><strong>${d.score||0} Pkt</strong></div>`;
+      return `<div class="score-row"><span><span class="tm" style="background:${A.teamColor(d.team)}">${A.teamEmoji(d.team)}</span>${medal} ${displayName}</span><strong>${d.score||0} Pkt</strong></div>`;
     }).join("");
   }
   return html;
 }
 
-console.log("✅ games.js loaded");
+console.log("✅ games.js loaded (Teens)");

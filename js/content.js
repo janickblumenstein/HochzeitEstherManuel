@@ -1,85 +1,76 @@
 // === content.js ===
-// HIER werden Fragen, Fotos und Quiz-Sets vorbereitet.
-// Der Host wählt am Hochzeitstag nur noch "welches Set starten?" — fertig.
+// HIER werden die Teens, Fragen, Fotos und Quiz-Sets vorbereitet.
+// Der Host wählt am Abend nur noch "welches Set starten?" — fertig.
+//
+// PoC für den Teens-Abschluss: aus "Wer von beiden?" wird
+// "Welcher der Teens ist das?". Jede Frage hat als Antwort eine Teen-id.
 
-window.HochzeitContent = {
+window.TeensContent = {
 
-  // Namen des Paares (können im Host-Panel live geändert werden)
-  braut: "Alessia ",
-  braeutigam: "Silas",
+  // Titel/Untertitel auf Login & Beamer
+  eventTitle: "Teens-Abschluss",
+  subtitle:   "Lerne unsere Teens kennen",
+
+  // Label für Besucher, die sich KEINEM Teen zugehörig fühlen wollen.
+  // (kein Zwang, kein "Gäste"-Stempel — einfach offen)
+  neutralLabel: "Noch offen",
+
+  // ═══════════════════════════════════════════════════════
+  // DIE TEENS  (id = intern, name = Anzeige, color = Farbe)
+  // Reihenfolge = Reihenfolge der Antwort-Buttons.
+  // Tipp: Fotos auf imgur.com hochladen → "Bildadresse kopieren".
+  // ═══════════════════════════════════════════════════════
+  teens: [
+    { id: "t1", name: "Teen 1", emoji: "🧑", color: "#e8a4b8", photo: "" },
+    { id: "t2", name: "Teen 2", emoji: "👧", color: "#6ba3c7", photo: "" },
+    { id: "t3", name: "Teen 3", emoji: "👦", color: "#7ed987", photo: "" },
+    { id: "t4", name: "Teen 4", emoji: "👩", color: "#e8a555", photo: "" },
+    { id: "t5", name: "Teen 5", emoji: "🧒", color: "#b98ce8", photo: "" }
+  ],
 
   // ═══════════════════════════════════════════════════════
   // FRAGEN-POOL
   // ═══════════════════════════════════════════════════════
   questions: {
 
-    // --- WER-VON-BEIDEN: answer = "braut" oder "braeutigam" ---
-who: [
-      { q: "Wer würde eher zu spät kommen?", answer: "braeutigam" },
-      { q: "Wer würde eher die Orientierung verlieren?", answer: "braut" },
-      { q: "Wer würde eher aus Versehen etwas kaputt machen?", answer: "braut" },
-      { q: "Wer würde eher einen cringe Tanzmove bringen?", answer: "braeutigam" },
-      { q: "Wer würde eher ein Möbelstück falsch zusammenbauen?", answer: "braut" },
-      { q: "Wer kocht besser?", answer: "braeutigam" },
-      { q: "Wer würde eher die Kontrolle am Grill übernehmen?", answer: "braeutigam" },
-      { q: "Wer würde eher im Urlaub einen Sonnenbrand bekommen?", answer: "braeutigam" },
-      { q: "Wer würde eher beim Schätzen komplett danebenliegen?", answer: "braut" }
+    // --- RATEN: "Welcher Teen ist das?" -----------------------------
+    // answer = id eines Teens (z.B. "t1").
+    // photoUrl optional → mit Foto ein Bild-Quiz, ohne Foto ein Satz/Fakt-Quiz.
+    guess: [
+      { q: "Welcher Teen ist auf diesem Babyfoto?",
+        photoUrl: "https://via.placeholder.com/400x400/e8a4b8/fff?text=Babyfoto+1", answer: "t1" },
+      { q: "Und auf diesem Kindheitsfoto?",
+        photoUrl: "https://via.placeholder.com/400x400/6ba3c7/fff?text=Foto+2",     answer: "t2" },
+      { q: "Wer ist das als kleiner Wirbelwind?",
+        photoUrl: "https://via.placeholder.com/400x400/7ed987/fff?text=Foto+3",     answer: "t3" },
+
+      // --- ohne Foto: ein Satz/Fakt wird eingeblendet ---
+      { q: "„Ich wollte als Kind unbedingt Feuerwehrmann werden.“ — Welcher Teen war das?", answer: "t4" },
+      { q: "„Mein erstes Wort war angeblich 'Ball'.“ — Welcher Teen?",                       answer: "t5" },
+      { q: "Welcher Teen ist am längsten schon in der Gruppe dabei?",                        answer: "t1" },
+      { q: "Welcher Teen kann am besten Fussball jonglieren?",                               answer: "t3" }
     ],
 
-    // --- SCHÄTZFRAGEN: answer = Zahl ---
+    // --- SCHÄTZFRAGEN (optional, funktioniert teamübergreifend) ---
+    // answer = Zahl. Punkte für die nächsten Tipper, Rundensieg fürs Team.
     estimate: [
-      { q: "Wie viele Jahre kennen sich Alessia & Silas schon?",       answer: 8,    unit: "Jahre" },
-      { q: "Wie viele Länder haben sie zusammen bereist?",        answer: 12,   unit: "Länder" },
-      { q: "Wie viele Tage hat der längste Streit gedauert?",     answer: 3,    unit: "Tage" },
-      { q: "In welchem Jahr war das erste Date?",                 answer: 2016, unit: "" },
-      { q: "Wie viele Gäste sind heute da?",                      answer: 98,   unit: "Gäste" },
-      { q: "Wie viele Minuten dauerte die Traurede?",             answer: 14,   unit: "Min" },
-      { q: "Wie viele Paar Schuhe besitzt Alessia?",                 answer: 34,   unit: "Paar" },
-      { q: "Kosten der Flitterwochen in CHF?",                    answer: 6500, unit: "CHF" }
-    ],
-
-    // --- KINDHEITSFOTOS: photoUrl + answer ---
-    photos: [
-      { q: "Wer ist auf dem Foto?", photoUrl: "https://via.placeholder.com/400x400/e8a4b8/fff?text=Foto+1", answer: "braut" },
-      { q: "Und hier?",             photoUrl: "https://via.placeholder.com/400x400/6ba3c7/fff?text=Foto+2", answer: "braeutigam" },
-      { q: "Wer könnte das sein?",  photoUrl: "https://via.placeholder.com/400x400/e8a4b8/fff?text=Foto+3", answer: "braut" },
-      { q: "Ratet mal!",            photoUrl: "https://via.placeholder.com/400x400/6ba3c7/fff?text=Foto+4", answer: "braeutigam" }
-      // TIPP: Fotos auf imgur.com hochladen → Rechtsklick aufs Bild → "Bildadresse kopieren"
-    ],
-
-    // --- EHE-PROGNOSEN (kein "richtig", Mehrheit gewinnt Runde) ---
-    prognose: [
-      { q: "Wer schläft zuerst auf der Couch ein?" },
-      { q: "Wer wird öfter 'Ich hab's dir doch gesagt' sagen?" },
-      { q: "Wer würde eher die bessere Idee für ein Date haben?" },
-      { q: "Wer ist romantischer?" },
-      { q: "Wer würde eher den Jahrestag vergessen?" }
-    ],
-
-    // --- FAMILIE: frei wählbare 2 Optionen + answer "a" oder "b" ---
-    family: [
-      { q: "Wer hat die längere Velo-Tour gemacht?",    optA: "Vater Braut",   optB: "Vater Bräutigam",   answer: "a" },
-      { q: "Wer hat mehr Enkel?",                       optA: "Oma Braut",     optB: "Oma Bräutigam",     answer: "b" },
-      { q: "Wessen Geschwister sind älter im Schnitt?", optA: "Braut-Seite",   optB: "Bräutigam-Seite",   answer: "a" },
-      { q: "Wer backt den besseren Kuchen?",            optA: "Mutter Braut",  optB: "Mutter Bräutigam",  answer: "a" }
+      { q: "Wie viele Jahre waren unsere 5 Teens zusammen in der Gruppe?", answer: 5,  unit: "Jahre" },
+      { q: "Wie viele Lager haben sie zusammen erlebt?",                   answer: 12, unit: "Lager" }
     ]
   },
 
   // ═══════════════════════════════════════════════════════
-  // QUIZ-SETS: was der Host am Hochzeitstag starten kann
-  // pick: { who: 3 }       = 3 zufällige Wer-Fragen
-  // pick: { photos: "all" }= alle Fotos der Reihe nach
-  // pick: { random: 10 }   = 10 zufällige aus allen Kategorien gemischt
+  // QUIZ-SETS: was der Host am Abend starten kann
+  // pick: { guess: 5 }     = 5 Rate-Fragen
+  // pick: { guess: "all" } = alle Rate-Fragen der Reihe nach
+  // pick: { random: 8 }    = 8 zufällig gemischt aus allen Kategorien
   // ═══════════════════════════════════════════════════════
   sets: [
-    { id: "whoRound",  label: "👫 Wer-von-beiden (9 Fragen)", pick: { random: 14 },         timer: 20 }//,
-    //{ id: "fotos",     label: "📷 Foto-Quiz (alle Fotos)",    pick: { photos: "all" },  timer: 15 },
-    //{ id: "schaetzen", label: "🔢 Schätz-Runde (4 Fragen)",   pick: { estimate: 4 },    timer: 30 },
-    //{ id: "familie",   label: "👨‍👩‍👧 Familien-Quiz",              pick: { family: "all" },  timer: 25 },
-    //{ id: "prognose",  label: "🔮 Ehe-Prognose (3 Fragen)",   pick: { prognose: 3 },    timer: 20 },
-    //{ id: "mixed",     label: "🎲 Bunter Mix (10 Fragen)",    pick: { random: 5 },     timer: 20 },
-    //{ id: "bigFinal",  label: "🏆 Grosses Finale (15 Mixed)", pick: { random: 15 },     timer: 20 }
+    { id: "fotos",     label: "📷 Babyfotos (alle)",        pick: { guess: "all" }, timer: 20 },
+    { id: "saetze",    label: "💬 Wer war das? (5 Fragen)", pick: { guess: 5 },     timer: 20 },
+    { id: "schaetzen", label: "🔢 Schätz-Runde (2 Fragen)", pick: { estimate: 2 },  timer: 30 },
+    { id: "mixed",     label: "🎲 Bunter Mix (8 Fragen)",   pick: { random: 8 },    timer: 20 }
   ]
 };
 
-console.log("✅ content.js loaded — Sets:", window.HochzeitContent.sets.length);
+console.log("✅ content.js loaded — Teens:", window.TeensContent.teens.length, "Sets:", window.TeensContent.sets.length);

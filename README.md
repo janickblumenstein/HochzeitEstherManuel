@@ -1,131 +1,83 @@
-# ♥ Hochzeits-Rate-Spiel v2
+# ✦ Teens-Abschluss – Mitmach-Spiel (PoC)
 
-Einfache Web-App für Hochzeitsgesellschaften: Host steuert spontan Quiz-Sets oder ein Tap-Duell, Gäste tippen am Handy mit, der Beamer zeigt Fragen & Ergebnisse groß.
+Web-App, um die Gemeinde & Gäste beim Teens-Abschluss-Gottesdienst einzubinden:
+Auf dem Beamer erscheint ein Foto oder ein Satz, alle raten am Handy
+**„Welcher der Teens ist das?"**. Fan-Teams sammeln Rundensiege, einzelne
+Tipper sammeln Punkte.
+
+> Diese App ist aus dem bewährten Hochzeits-Rate-Spiel entstanden. Statt
+> *„Wer von **beiden**?"* (Braut/Bräutigam) geht es jetzt um *„Welcher der
+> **Teens**?"* – die binäre Logik wurde auf **beliebig viele Teens + ein
+> neutrales Team** verallgemeinert.
+
+## 🎯 Konzept
+
+- **Jeder Besucher** scannt den QR-Code, gibt **optional** einen Namen ein und
+  wählt **ein Teen als Fan-Team** – oder bleibt bewusst **„Noch offen"**
+  (kein Zwang, kein Popularitäts-Contest).
+- **Spiel:** Host zeigt Babyfotos / Kindheitsfotos oder blendet einen Satz/Fakt
+  ein. Alle tippen, welcher Teen gemeint ist.
+- **Wertung – bewusst relativ, nie absolut:**
+  - **Einzelpunkte:** +1 pro richtige Antwort → persönliche Rangliste.
+  - **Rundensieg fürs Fan-Team:** das Team mit der höchsten **Trefferquote in %**
+    gewinnt die Runde. Dadurch ist die **Teamgrösse egal** – ein Teen mit
+    wenigen Fans kann genauso gewinnen wie eins mit vielen.
+- **Tap-Duell** als Auflockerung: schnellstes Fan-Team (Taps pro Person) gewinnt.
 
 ## 📁 Projekt-Struktur
 
 ```
-hochzeit/
-├── index.html
-├── README.md
+├── index.html       ← Layout & Styles
 └── js/
-    ├── content.js    ← HIER Fragen, Fotos & Sets anpassen
-    ├── core.js       ← Firebase-Config, Login, Team-Board
-    ├── games.js      ← Quiz-Runner mit Timer und Team-Fairness
-    ├── tapduel.js    ← Tap-Duell (15 Sek Zwischenspiel)
-    └── beamer.js     ← Beamer-Großansicht
+    ├── content.js   ← HIER: Teens, Fragen, Fotos & Sets anpassen
+    ├── core.js      ← Firebase, Login, Team-Modell (Teens + neutral)
+    ├── games.js     ← Quiz-Runner mit Timer & relativer Team-Wertung
+    ├── tapduel.js   ← Tap-Duell aller Fan-Teams
+    └── beamer.js    ← Beamer-Großansicht
 ```
-
-## ✨ Was ist neu gegenüber v1
-
-- **Quiz-Sets statt Einzelfragen**: Host wählt z.B. "Bunter Mix (10 Fragen)" → läuft automatisch durch
-- **Timer pro Frage** (default 20s, pro Set konfigurierbar, Host kann +10s geben)
-- **Faire Team-Wertung**: Team mit der höheren Trefferquote (%) gewinnt 1 Rundensieg — Teamgröße egal
-- **Host spielt nicht mit**: Als Host eingeloggt → keine Antwort-Buttons, nur Steuerung und Live-Status
-- **Tap-Duell als Zwischenspiel**: 15 Sek Tippen, Team mit höchstem Durchschnitt pro Person gewinnt
-- **Foto-Sets**: Einmal in `content.js` vorbereiten, dann mit einem Klick starten
-- **Beamer-Timer**: Countdown groß am Beamer, wird rot in den letzten 5 Sek
 
 ## 🚀 Setup in 3 Schritten
 
-### 1. Firebase einrichten (~5 Min, kostenlos)
-
-1. https://console.firebase.google.com → **"Add project"**
-2. **Build → Realtime Database → Create** → Region `europe-west1`
-3. **⚙️ Project Settings → General** → Web-App registrieren (`</>`)
-4. Die `firebaseConfig` in `js/core.js` Zeilen 6–11 einsetzen
-5. Database **Rules-Tab**:
+### 1. Firebase
+Die `firebaseConfig` in `js/core.js` (Zeilen 9–14) eintragen.
+Die App nutzt den Raum **`TEENS`** (Konstante `ROOM` in `core.js`), kollidiert
+also nicht mit anderen Apps in derselben Datenbank.
+Realtime-Database-Rules (für ein Event):
 ```json
-{
-  "rules": {
-    ".read": "now < 1830000000000",
-    ".write": "now < 1830000000000"
-  }
-}
+{ "rules": { ".read": "now < 1830000000000", ".write": "now < 1830000000000" } }
 ```
 
-### 2. Fragen & Sets anpassen
+### 2. Teens & Fragen anpassen → `js/content.js`
+- **`teens`**: id, Name, Emoji, Farbe (`color`) und optional `photo` je Teen.
+  Die Reihenfolge bestimmt die Reihenfolge der Antwort-Buttons.
+- **`questions.guess`**: Fragen mit `answer: "<teen-id>"`.
+  - *mit* `photoUrl` → Bild-Quiz („Welcher Teen ist auf dem Foto?")
+  - *ohne* `photoUrl` → Satz/Fakt-Quiz („Welcher Teen hat das gesagt?")
+- **`questions.estimate`** (optional): Schätzfragen mit Zahl-`answer`.
+- **`sets`**: welche Quiz-Sets der Host starten kann.
 
-`js/content.js` öffnen und anpassen:
-
-- **`braut` / `braeutigam`**: Echte Namen
-- **`questions.who/estimate/photos/prognose/family`**: Deine eigenen Fragen
-- **`sets`**: Welche Quiz-Sets der Host starten kann
-
-Quiz-Sets sehen so aus:
-```javascript
-{ id: "whoRound", label: "👫 Wer-von-beiden (5 Fragen)", pick: { who: 5 }, timer: 20 }
-```
-
-`pick`-Optionen:
-- `{ who: 3 }` → 3 zufällige Wer-Fragen
-- `{ photos: "all" }` → alle Fotos der Reihe nach
-- `{ random: 10 }` → 10 zufällige aus allen Kategorien gemischt
-- Mehrere kombinierbar: `{ who: 2, photos: 2, estimate: 1 }`
-
-**Fotos**: Auf https://imgur.com hochladen → Rechtsklick → "Bildadresse kopieren" → als `photoUrl` einfügen.
+> Fotos auf https://imgur.com hochladen → Rechtsklick → „Bildadresse kopieren".
 
 ### 3. Hosten
+**Netlify Drop** (https://netlify.com/drop): Ordner in den Browser ziehen → fertig.
+Alternativ Vercel oder GitHub Pages.
 
-**Empfohlen: Netlify Drop** (https://netlify.com/drop)
-- Ordner einfach in den Browser ziehen → läuft sofort mit eigener URL
+## 🎮 Ablauf am Abend
 
-Alternativ: **Vercel** oder **GitHub Pages**.
+**Host:** 3× auf den Titel oben tippen → Host-Button erscheint → ohne Team starten →
+Host-Tab → Set wählen → starten → Frage auflösen → nächste Frage.
 
-## 🎮 Ablauf am Hochzeitstag
+**Beamer-Laptop:** gleiche URL mit `?beamer=1` öffnen (Vollbild, QR-Code unten rechts).
 
-**Host (z.B. Trauzeuge)**:
-1. 3× auf "♥ HOCHZEIT ♥"-Logo tippen → Host-Button erscheint
-2. Name eingeben → "Als Host starten" (kein Team nötig, Host spielt nicht mit)
-3. Host-Tab öffnen → Quiz-Set wählen → "Set starten"
+**Gäste:** QR scannen → (Name optional) → Teen wählen oder „Noch offen" → mitmachen.
 
-**Beamer-Laptop**:
-- Gleiche URL mit `?beamer=1` am Ende öffnen → Vollbild, zeigt alles automatisch
+## ⚠️ Known Limits (PoC)
+- Keine Foto-Uploads in der App (imgur-/Bild-URLs nötig).
+- Ein Raum (`TEENS`) – für ein Event reicht das.
+- Kein echtes Auth.
+- `color-mix()` im CSS → moderne Browser nötig (aktuelle Handys: kein Problem).
 
-**Gäste**:
-- QR-Code scannen → Name + Team wählen → mitmachen
-
-**Während des Quiz**:
-- Zeitlimit läuft automatisch ab → Host kann früher auflösen oder +10 Sek geben
-- Nach Auflösung: "Nächste Frage"-Button (oder Quiz beenden am Ende)
-- Zwischendurch: "⚡ Tap-Duell starten" für 15 Sek Auflockerung
-
-## 🎯 Die 5 Fragetypen
-
-| Typ | Mechanik | Einzel-Punkte | Team-Rundensieg |
-|---|---|---|---|
-| **Wer von beiden?** | Klick auf Braut/Bräutigam | +1 pro richtig | Team mit höherer Trefferquote |
-| **Schätzfrage** | Zahl eingeben | +3/+2/+1 für Top 3 | Team des Siegers (Top 1) |
-| **Kindheitsfoto** | Foto wird groß gezeigt | +1 pro richtig | Team mit höherer Trefferquote |
-| **Familie** | 2 custom Optionen | +1 pro richtig | Team mit höherer Trefferquote |
-| **Ehe-Prognose** | Kein "richtig" | keine | Mehrheits-Team gewinnt Runde |
-
-## ⚡ Tap-Duell (Zwischenspiel, 15 Sek)
-
-- Jeder tippt so oft wie möglich auf den Team-Button
-- **Gewinner** = Team mit dem höchsten **Durchschnitt pro Person** (nicht der Summe!) → Teamgröße egal
-- Gewinner-Team bekommt 1 Rundensieg
-- Live-Anzeige am Beamer
-
-## 🏆 Scoring-System
-
-- **Rundensiege** (Team-Stand): Hauptmetrik, 1 pro gewonnene Runde. Fair auch bei ungleicher Teamgröße.
-- **Einzelpunkte** (persönliche Rangliste): Pro richtige Antwort, nicht für Team-Wertung.
-
-Am Ende des Abends kürt ihr:
-- **Team-Sieger** (meiste Rundensiege)
-- **Top-Tipper** (Einzel-Rangliste)
-
-## 🔧 Tipps für den Abend
-
-- **Dramaturgie**: Warmmacher → Foto-Quiz → Schätz-Runde → Tap-Duell als Pause → Familien-Quiz → Prognose → Grosses Finale (Mixed)
-- **Zeit**: Ein Set dauert 3–5 Min je nach Anzahl Fragen. Verteile 2–4 Sets über den Abend.
-- **Beamer-Fallback**: Funktioniert auch komplett ohne Beamer, nur aufs Handy.
-
-## ⚠️ Known Limits
-
-- Keine Foto-Uploads in der App (imgur-URLs nötig)
-- Ein Raum (`HOCHZEIT`) — für ein Event reicht das
-- Kein Auth — wer den Namen kennt kann als der Name einloggen (unkritisch für Hochzeit)
-
-Viel Spaß! 💍
+## 💡 Ideen für später
+- Eigener Fragetyp „Zitat-Zuordnung" mit Audio.
+- „Steckbrief" je Teen, der nach jeder Runde ein Stück mehr enthüllt wird.
+- Abschluss-Slide pro Teen mit Foto & Segenswunsch.

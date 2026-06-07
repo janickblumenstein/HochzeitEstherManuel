@@ -1,9 +1,11 @@
-// === core.js – Basis-Modul ===
+// === core.js – Basis-Modul (Teens-Abschluss) ===
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { getDatabase, ref, set, onValue, update, get, remove } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
 // ═══════════════════════════════════════════════════════════
 // FIREBASE-CONFIG
+// (eigener Raum "TEENS" → kollidiert NICHT mit der Hochzeits-App,
+//  selbst wenn dieselbe Firebase-Datenbank genutzt wird)
 // ═══════════════════════════════════════════════════════════
 const firebaseConfig = {
   apiKey: "AIzaSyCQxhhkr-YF81rJ7J-ApwGmonB4CUywlp8",
@@ -15,7 +17,24 @@ const firebaseConfig = {
 
 const fbApp = initializeApp(firebaseConfig);
 const db = getDatabase(fbApp);
-const ROOM = "HOCHZEIT";
+const ROOM = "TEENS";
+
+// ── Team-Modell: die Teens + ein neutrales Team ──────────────
+const NEUTRAL_ID = "neutral";
+function neutralTeam(){
+  return { id: NEUTRAL_ID, name: (window.TeensContent && window.TeensContent.neutralLabel) || "Noch offen",
+           emoji: "🤷", color: "#9a8fa5", neutral: true };
+}
+// Alle Teams (Teens + neutral) – einzige Quelle der Wahrheit fürs UI.
+function allTeams(){
+  const teens = (window.TeensContent && window.TeensContent.teens) || [];
+  return [...teens, neutralTeam()];
+}
+function teensOnly(){ return (window.TeensContent && window.TeensContent.teens) || []; }
+function teamById(id){ return allTeams().find(t => t.id === id) || null; }
+function teamName(id){ const t = teamById(id); return t ? t.name : (id || "—"); }
+function teamColor(id){ const t = teamById(id); return t ? t.color : "#9a8fa5"; }
+function teamEmoji(id){ const t = teamById(id); return t ? t.emoji : "👤"; }
 
 const App = window.App = {
   db, ref, set, onValue, update, get, remove,
@@ -24,7 +43,9 @@ const App = window.App = {
   timers: [],
   listeners: {},
   $: id => document.getElementById(id),
-  toast, awardScore, switchTab, clearTimers, shuffle, isBeamer: false
+  toast, awardScore, switchTab, clearTimers, shuffle, isBeamer: false,
+  // Team-Helper für alle Module:
+  allTeams, teensOnly, teamById, teamName, teamColor, teamEmoji, NEUTRAL_ID
 };
 
 function clearTimers(){ App.timers.forEach(t=>{clearInterval(t);clearTimeout(t)}); App.timers=[]; }
@@ -55,7 +76,7 @@ if(urlParams.get("beamer") === "1"){
   connectBeamer();
 } else {
   initLogin();
-  attemptAutoLogin(); // Direkt beim Start Auto-Login versuchen
+  attemptAutoLogin();
 }
 
 async function connectBeamer(){
@@ -69,30 +90,44 @@ async function connectBeamer(){
 function beamerUpdate(){ if(App.listeners.onBeamerUpdate) App.listeners.onBeamerUpdate(); }
 
 function initLogin() {
+  // Titel/Untertitel aus content.js
+  const c = window.TeensContent || {};
+  if(App.$("landingLogo")) App.$("landingLogo").innerText = `✦ ${c.eventTitle || "Teens-Abschluss"} ✦`;
+  if(App.$("coupleName"))  App.$("coupleName").innerText  = c.subtitle || "";
+
   let hostClicks = 0;
   App.$("landingLogo").onclick = () => {
     hostClicks++;
     if(hostClicks >= 3) App.$("btnHost").classList.remove("hidden");
   };
 
+  // Team-Buttons dynamisch aus den Teens (+ neutral) bauen
   let selectedTeam = null;
-  document.querySelectorAll(".team-btn").forEach(btn => {
-    btn.onclick = () => {
-      document.querySelectorAll(".team-btn").forEach(b => b.classList.remove("sel-braut", "sel-braeutigam"));
-      selectedTeam = btn.dataset.team;
-      btn.classList.add("sel-" + selectedTeam);
-    };
-  });
+  const pick = App.$("teamPick");
+  if(pick){
+    pick.innerHTML = allTeams().map(t => `
+      <button class="team-btn" data-team="${t.id}" style="--tcol:${t.color}">
+        <span class="ic">${t.emoji}</span>${t.name}
+      </button>`).join("");
+
+    pick.querySelectorAll(".team-btn").forEach(btn => {
+      btn.onclick = () => {
+        pick.querySelectorAll(".team-btn").forEach(b => b.classList.remove("sel"));
+        selectedTeam = btn.dataset.team;
+        btn.classList.add("sel");
+      };
+    });
+  }
 
   App.$("btnJoin").onclick = () => start(false, selectedTeam);
   App.$("btnHost").onclick = () => start(true, null);
 }
 
 async function attemptAutoLogin() {
-  const savedUid = localStorage.getItem("wedding_uid");
+  const savedUid = localStorage.getItem("teens_uid");
   if (!savedUid) return;
 
-  const savedName = localStorage.getItem("wedding_name") || savedUid.split('_')[0];
+  const savedName = localStorage.getItem("teens_name") || savedUid.split('_')[0];
   if (App.$("nameInp")) App.$("nameInp").value = savedName;
 
   try {
@@ -122,31 +157,38 @@ async function attemptAutoLogin() {
 
 async function start(takeHost, team) {
   const inputName = App.$("nameInp").value.trim();
-  if (!inputName) return alert("Bitte Namen eingeben!");
-  if (!takeHost && !team) return alert("Bitte Team wählen!");
-
-  let finalName = inputName;
-  let uid = localStorage.getItem("wedding_uid") || (inputName + "_" + Math.random().toString(36).substr(2, 4));
+  // Name ist OPTIONAL → leer = automatischer Gast-Name
+  if (!takeHost && !team) return alert("Bitte ein Teen oder „" + neutralTeam().name + "“ wählen!");
 
   const playersSnap = await get(ref(db, `rooms/${App.room}/players`));
   const players = playersSnap.val() || {};
-  
+
+  let finalName = inputName;
+  if (!finalName) {
+    // automatischer, freundlicher Gast-Name
+    let n = Object.keys(players).length + 1;
+    while (Object.values(players).some(p => p.name === ("Gast " + n))) n++;
+    finalName = "Gast " + n;
+  }
+
+  let uid = localStorage.getItem("teens_uid") || (finalName.replace(/\s+/g,'') + "_" + Math.random().toString(36).substr(2, 4));
+
   if (!takeHost) {
     let nameExists = Object.values(players).some(p => p.name === finalName && p.uid !== uid);
     if (nameExists) {
       let count = 2;
-      while (Object.values(players).some(p => p.name === (inputName + " " + count))) { count++; }
-      finalName = inputName + " " + count;
+      while (Object.values(players).some(p => p.name === (finalName + " " + count))) { count++; }
+      finalName = finalName + " " + count;
       toast(`Name angepasst: ${finalName}`);
     }
   }
 
-  App.user = uid; 
+  App.user = uid;
   App.userName = finalName;
   App.team = team;
-  
-  localStorage.setItem("wedding_uid", uid);
-  localStorage.setItem("wedding_name", finalName);
+
+  localStorage.setItem("teens_uid", uid);
+  localStorage.setItem("teens_name", finalName);
 
   if (takeHost) {
     await update(ref(db, `rooms/${App.room}/meta`), { host: uid, hostName: finalName });
@@ -172,27 +214,22 @@ function attachListeners() {
   onValue(ref(db, `rooms/${App.room}/meta`), snap => {
     const m = snap.val() || {};
     App.meta = m;
-    
-    App.isHost = (m.host === App.user); 
 
-    const teamEmoji = App.team === "braut" ? "👰" : App.team === "braeutigam" ? "🤵" : "👑";
-    const teamClass = App.team || "host";
-    
+    App.isHost = (m.host === App.user);
+
     const badge = App.$("userBadge");
     if(badge) {
-      badge.innerHTML = `<span class="badge ${teamClass}">${teamEmoji} ${App.userName}</span>` + 
+      const emoji = App.isHost ? "👑" : teamEmoji(App.team);
+      badge.innerHTML = `<span class="badge" style="color:${App.isHost?'var(--gold)':teamColor(App.team)}">${emoji} ${App.userName}</span>` +
                         (App.isHost ? ' <span class="badge host"> (Host)</span>' : '');
     }
 
     const hStat = App.$("hostStatus");
     if(hStat) hStat.innerHTML = `Aktueller Host: <b>${m.hostName || '-'}</b>`;
-    
+
     const controls = App.$("hostControls");
     if(controls) controls.classList.toggle("hidden", !App.isHost);
     document.querySelectorAll(".hostOnly").forEach(el => el.classList.toggle("hidden", !App.isHost));
-    
-    if(m.braut && App.$("nameBraut")) App.$("nameBraut").value = m.braut;
-    if(m.braeutigam && App.$("nameBraeutigam")) App.$("nameBraeutigam").value = m.braeutigam;
   });
 
   onValue(ref(db, `rooms/${App.room}/players`), snap => {
@@ -202,7 +239,7 @@ function attachListeners() {
   });
 
   onValue(ref(db, `rooms/${App.room}/teams`), snap => {
-    App.teams = snap.val() || { braut: 0, braeutigam: 0 };
+    App.teams = snap.val() || {};
     renderTeamBoard();
   });
 }
@@ -218,7 +255,7 @@ function bindCoreUI(){
     const upd = {};
     Object.keys(App.players).forEach(p=>{ upd[`${p}/score`] = 0; });
     await update(ref(db, `rooms/${App.room}/players`), upd);
-    await set(ref(db, `rooms/${App.room}/teams`), { braut: 0, braeutigam: 0 });
+    await remove(ref(db, `rooms/${App.room}/teams`));
     toast("Alles zurückgesetzt");
   };
 
@@ -226,19 +263,9 @@ function bindCoreUI(){
   if(btnFull) btnFull.onclick = async()=>{
     if(!App.isHost || !confirm("WIRKLICH ALLES löschen? Alle Spieler fliegen raus.")) return;
     await remove(ref(db, `rooms/${App.room}`));
-    localStorage.removeItem("wedding_uid"); // Auch lokalen Cache leeren
-    localStorage.removeItem("wedding_name");
+    localStorage.removeItem("teens_uid");
+    localStorage.removeItem("teens_name");
     location.reload();
-  };
-
-  const btnSave = App.$("btnSaveNames");
-  if(btnSave) btnSave.onclick = async()=>{
-    if(!App.isHost) return;
-    const b = App.$("nameBraut").value.trim();
-    const br = App.$("nameBraeutigam").value.trim();
-    if(b) await update(ref(db, `rooms/${App.room}/meta`), { braut: b });
-    if(br) await update(ref(db, `rooms/${App.room}/meta`), { braeutigam: br });
-    toast("Namen gespeichert");
   };
 
   const bu = location.origin + location.pathname + "?beamer=1";
@@ -258,36 +285,29 @@ function switchTab(name){
   if(t) t.classList.remove("hidden");
 }
 
+// ── Team-Board: eine Karte pro Team (Teens + neutral) ───────
 function renderTeamBoard(){
   const board = App.$("teamBoard"); if(!board) return;
   const players = App.players || {};
-  const teams = { braut: { members: [] }, braeutigam: { members: [] } };
-  Object.entries(players).forEach(([n, p])=>{
-    if(p.team === "braut" || p.team === "braeutigam"){
-      teams[p.team].members.push(n);
-    }
-  });
-  const t = App.teams || { braut: 0, braeutigam: 0 };
-  const m = App.meta || {};
-  const nameB = m.braut || "Braut";
-  const nameBr = m.braeutigam || "Bräutigam";
-  const winB = (t.braut || 0) > (t.braeutigam || 0);
-  const winBr = (t.braeutigam || 0) > (t.braut || 0);
+  const wins = App.teams || {};
 
-  board.innerHTML = `
-    <div class="team-card braut ${winB?'team-winning':''}">
-      <div class="nm">👰 Team ${nameB}</div>
-      <div class="pts">${t.braut || 0}</div>
-      <div class="pts-sub">Rundensiege</div>
-      <div class="mem">${teams.braut.members.length} Mitglieder</div>
-    </div>
-    <div class="team-card braeutigam ${winBr?'team-winning':''}">
-      <div class="nm">🤵 Team ${nameBr}</div>
-      <div class="pts">${t.braeutigam || 0}</div>
-      <div class="pts-sub">Rundensiege</div>
-      <div class="mem">${teams.braeutigam.members.length} Mitglieder</div>
-    </div>
-  `;
+  // Mitgliederzahl pro Team
+  const memberCount = {};
+  Object.values(players).forEach(p=>{ if(p.team) memberCount[p.team] = (memberCount[p.team]||0)+1; });
+
+  const maxWins = Math.max(0, ...allTeams().map(t => wins[t.id] || 0));
+
+  board.innerHTML = allTeams().map(t=>{
+    const w = wins[t.id] || 0;
+    const winning = w > 0 && w === maxWins;
+    return `
+      <div class="team-card ${winning?'team-winning':''}" style="--tcol:${t.color}">
+        <div class="nm">${t.emoji} ${t.name}</div>
+        <div class="pts" style="color:${t.color}">${w}</div>
+        <div class="pts-sub">Rundensiege</div>
+        <div class="mem">${memberCount[t.id]||0} Fans</div>
+      </div>`;
+  }).join("");
 }
 
 function renderLeaderboard(){
@@ -295,13 +315,12 @@ function renderLeaderboard(){
   const sorted = Object.entries(App.players).sort((a,b)=>(b[1].score||0)-(a[1].score||0));
   lb.innerHTML = sorted.map(([n, d], i)=>{
     const medal = ['🥇','🥈','🥉'][i] || ((i+1)+'. ');
-    const tmLabel = d.team === "braut" ? "👰 B" : "🤵 Br";
-    const displayName = d.name || n.split('_')[0]; // Falls UID angezeigt wird, zeige Name
+    const displayName = d.name || n.split('_')[0];
     return `<div class="score-row ${n===App.user?'me':''}">
-      <span><span class="tm ${d.team}">${tmLabel}</span>${medal}${displayName}</span>
+      <span><span class="tm" style="background:${teamColor(d.team)}">${teamEmoji(d.team)}</span>${medal}${displayName}</span>
       <strong>${d.score||0} Pkt</strong>
     </div>`;
   }).join("") || '<div class="sub">Noch keine Spieler</div>';
 }
 
-console.log("✅ core.js loaded");
+console.log("✅ core.js loaded (Teens)");

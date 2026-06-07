@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Hochzeit – Rate-Abend</title>
+<title>Teens-Abschluss – Mitmach-Spiel</title>
 <style>
 :root{
-  --gold:#d4af37;--rose:#e8a4b8;--braut:#e8a4b8;--braeutigam:#6ba3c7;
+  --gold:#d4af37;--rose:#e8a4b8;
   --bg:#1a1520;--card:#2a2230;--card2:#352b3e;--muted:#9a8fa5;
   --border:#3e3448;--green:#4ecf6a;--red:#e85a5a;--ink:#f5eef8;--orange:#e8a555;
 }
@@ -16,10 +16,8 @@ body{padding-bottom:20px}
 .wrap{max-width:520px;margin:auto;padding:12px}
 .topbar{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:var(--card);border-radius:14px;margin-bottom:12px;position:sticky;top:10px;z-index:50;border:1px solid var(--border)}
 .topbar h1{margin:0;font-size:1rem;color:var(--gold);font-weight:600;letter-spacing:1px}
-.badge{font-size:.75rem;opacity:.8}
+.badge{font-size:.75rem;opacity:.85;font-weight:600}
 .badge.host{color:var(--gold);font-weight:bold;opacity:1}
-.badge.braut{color:var(--braut)}
-.badge.braeutigam{color:var(--braeutigam)}
 .card{background:var(--card);padding:18px;border-radius:16px;margin-bottom:12px;box-shadow:0 2px 14px rgba(0,0,0,.3);border:1px solid var(--border)}
 h2{margin:0 0 14px;font-size:1.15rem;color:var(--gold)}
 h3{margin:16px 0 10px;font-size:1rem;color:var(--rose)}
@@ -31,15 +29,12 @@ input,textarea{background:var(--card2);color:var(--ink);border:1px solid var(--b
 button{background:var(--gold);color:#000;font-weight:bold;cursor:pointer;transition:transform .1s}
 button:active{transform:scale(.97)}
 button:disabled{opacity:.35;cursor:not-allowed}
-.btn-braut{background:var(--braut);color:#2a1a20}
-.btn-braeutigam{background:var(--braeutigam);color:#0f2030}
 .btn-ghost{background:transparent;border:1px solid var(--border);color:var(--ink)}
 .btn-green{background:var(--green);color:#0a1a0c}
 .btn-red{background:var(--red);color:#fff}
 .btn-orange{background:var(--orange);color:#2a1a10}
 .btn-sm{padding:9px 13px;font-size:.85rem;width:auto;margin:3px}
 .row{display:flex;gap:8px}.row>*{flex:1}
-.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .hidden{display:none!important}
 
 /* === LOGIN === */
@@ -50,44 +45,47 @@ button:disabled{opacity:.35;cursor:not-allowed}
   background:radial-gradient(circle,rgba(232,164,184,.06) 0%,transparent 40%);
   animation:rotate 40s linear infinite;pointer-events:none}
 @keyframes rotate{to{transform:rotate(360deg)}}
-.landing-logo{font-size:2.4rem;font-weight:300;letter-spacing:3px;
+.landing-logo{font-size:2.1rem;font-weight:300;letter-spacing:3px;
   background:linear-gradient(120deg,var(--gold),var(--rose),var(--gold));
   background-size:200% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;
   animation:shine 4s ease-in-out infinite;cursor:pointer;user-select:none;margin-bottom:6px}
 @keyframes shine{0%,100%{background-position:0% 50%}50%{background-position:100% 50%}}
-.landing-sub{opacity:.65;font-size:.9rem;letter-spacing:4px;margin-bottom:30px;text-transform:uppercase}
+.landing-sub{opacity:.65;font-size:.9rem;letter-spacing:3px;margin-bottom:30px;text-transform:uppercase}
 .landing-card{background:rgba(42,34,48,.88);backdrop-filter:blur(10px);
   padding:26px;border-radius:22px;border:1px solid rgba(212,175,55,.18);
-  max-width:380px;width:100%;box-shadow:0 10px 40px rgba(0,0,0,.5);position:relative;z-index:1}
-.landing-emoji{font-size:3.2rem;margin-bottom:12px;animation:float 3s ease-in-out infinite}
+  max-width:400px;width:100%;box-shadow:0 10px 40px rgba(0,0,0,.5);position:relative;z-index:1}
+.landing-emoji{font-size:3rem;margin-bottom:12px;animation:float 3s ease-in-out infinite}
 @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
 .team-pick{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:14px 0}
-.team-btn{padding:20px 10px;border-radius:14px;border:2px solid var(--border);
-  background:var(--card2);color:var(--ink);cursor:pointer;font-size:1rem;font-weight:bold;transition:all .2s}
-.team-btn.sel-braut{border-color:var(--braut);background:rgba(232,164,184,.15);color:var(--braut)}
-.team-btn.sel-braeutigam{border-color:var(--braeutigam);background:rgba(107,163,199,.15);color:var(--braeutigam)}
-.team-btn .ic{display:block;font-size:2rem;margin-bottom:4px}
+.team-btn{padding:18px 10px;border-radius:14px;border:2px solid var(--border);
+  background:var(--card2);color:var(--ink);cursor:pointer;font-size:.95rem;font-weight:bold;transition:all .15s;margin:0}
+.team-btn.sel{border-color:var(--tcol);background:color-mix(in srgb,var(--tcol) 18%,transparent);color:var(--tcol)}
+.team-btn .ic{display:block;font-size:1.8rem;margin-bottom:4px}
 .host-hint{position:absolute;bottom:16px;font-size:.7rem;opacity:.3}
 
-/* === TEAM SCORE BOARD === */
-.team-board{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0}
-.team-card{padding:16px;border-radius:14px;text-align:center;border:2px solid var(--border)}
-.team-card.braut{background:rgba(232,164,184,.12);border-color:var(--braut)}
-.team-card.braeutigam{background:rgba(107,163,199,.12);border-color:var(--braeutigam)}
-.team-card .nm{font-size:.8rem;opacity:.8;margin-bottom:4px;text-transform:uppercase;letter-spacing:1px}
-.team-card .pts{font-size:2.4rem;font-weight:900;letter-spacing:1px}
-.team-card .pts-sub{font-size:.7rem;opacity:.6;margin-top:2px}
-.team-card.braut .pts{color:var(--braut)}
-.team-card.braeutigam .pts{color:var(--braeutigam)}
-.team-card .mem{font-size:.75rem;opacity:.6;margin-top:4px}
-.team-winning{box-shadow:0 0 20px rgba(212,175,55,.4);transform:scale(1.03)}
+/* === TEEN ANSWER BUTTONS === */
+.teen-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.teen-btn{border:2px solid var(--tcol);background:color-mix(in srgb,var(--tcol) 16%,transparent);
+  color:var(--ink);border-radius:14px;padding:20px 10px;font-size:1rem;font-weight:bold;cursor:pointer;margin:0}
+.teen-btn .te{display:block;font-size:1.8rem;margin-bottom:4px}
+.teen-btn:active{transform:scale(.96)}
+
+/* === TEAM SCORE BOARD (N Teams) === */
+.team-board{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin:10px 0}
+.team-card{padding:14px 10px;border-radius:14px;text-align:center;border:2px solid var(--tcol,var(--border));
+  background:color-mix(in srgb,var(--tcol,#888) 12%,transparent)}
+.team-card .nm{font-size:.8rem;opacity:.85;margin-bottom:4px}
+.team-card .pts{font-size:2.2rem;font-weight:900;letter-spacing:1px}
+.team-card .pts-sub{font-size:.65rem;opacity:.6;margin-top:2px}
+.team-card .mem{font-size:.72rem;opacity:.6;margin-top:4px}
+.team-winning{box-shadow:0 0 20px rgba(212,175,55,.45);transform:scale(1.03)}
 
 /* === SCORE ROWS === */
 .score-row{display:flex;justify-content:space-between;align-items:center;padding:10px 13px;border-radius:10px;margin:4px 0;background:var(--card2);font-size:.9rem}
 .score-row.me{background:rgba(212,175,55,.15);border:1px solid var(--gold)}
-.score-row .tm{font-size:.7rem;padding:2px 7px;border-radius:8px;margin-right:6px}
-.score-row .tm.braut{background:var(--braut);color:#2a1a20}
-.score-row .tm.braeutigam{background:var(--braeutigam);color:#0f2030}
+.score-row .tm{display:inline-block;font-size:.7rem;padding:2px 7px;border-radius:8px;margin-right:6px;color:#111}
+.dot{display:inline-block;width:11px;height:11px;border-radius:50%;margin-right:5px;vertical-align:middle}
+.legend{font-size:.78rem;opacity:.8;display:flex;flex-wrap:wrap;gap:6px 12px;margin:6px 2px}
 
 /* === GAME DISPLAY === */
 .q-big{font-size:1.3rem;color:var(--gold);text-align:center;margin:14px 0;font-weight:600;line-height:1.35}
@@ -107,18 +105,14 @@ button:disabled{opacity:.35;cursor:not-allowed}
 .timer-bar .fill.crit{background:var(--red)}
 .timer-num{font-size:1.4rem;color:var(--gold);text-align:center;font-weight:bold;margin:4px 0}
 
-/* === RESULT BARS === */
-.result-bar{height:28px;border-radius:6px;overflow:hidden;display:flex;margin:10px 0;background:var(--card2);position:relative}
-.result-bar .rb{display:flex;align-items:center;justify-content:center;color:#fff;font-weight:bold;font-size:.85rem;transition:width .6s ease-out}
-.result-bar .rb.braut{background:var(--braut);color:#2a1a20}
-.result-bar .rb.braeutigam{background:var(--braeutigam)}
+/* === RESULT BARS (N segmente) === */
+.result-bar{height:30px;border-radius:6px;overflow:hidden;display:flex;margin:10px 0;background:var(--card2)}
+.result-bar .rb{display:flex;align-items:center;justify-content:center;font-weight:bold;font-size:.85rem;transition:width .6s ease-out;min-width:0}
 
-/* === TAP DUEL === */
-.tap-btn{width:100%;padding:50px 20px;font-size:2rem;border-radius:20px;margin:15px 0;box-shadow:0 4px 12px rgba(0,0,0,.3);transition:transform .05s}
+/* === TAP === */
+.tap-btn{width:100%;border-radius:20px;margin:15px 0;box-shadow:0 4px 12px rgba(0,0,0,.3);transition:transform .05s}
 .tap-btn:active{transform:scale(.95)}
 .tap-count{font-size:5rem;font-weight:900;text-align:center;margin:10px 0}
-.tap-count.braut{color:var(--braut)}
-.tap-count.braeutigam{color:var(--braeutigam)}
 
 .toast{position:fixed;bottom:30px;left:50%;transform:translateX(-50%);background:var(--gold);color:#000;padding:12px 20px;border-radius:25px;font-weight:bold;z-index:200;animation:toastIn .3s;max-width:90%;text-align:center}
 @keyframes toastIn{from{transform:translateX(-50%) translateY(20px);opacity:0}to{transform:translateX(-50%) translateY(0);opacity:1}}
@@ -134,7 +128,7 @@ body.beamer-mode{background:#0a0810;padding:0}
 body.beamer-mode .wrap{max-width:1400px}
 body.beamer-mode .beamer-view{min-height:100vh;display:flex;flex-direction:column;justify-content:center;padding:60px 40px;text-align:center}
 body.beamer-mode .beamer-view h1{font-size:4rem;color:var(--gold);margin:0 0 20px;font-weight:300;letter-spacing:2px}
-body.beamer-mode .beamer-view .question{font-size:3rem;color:var(--ink);margin:30px auto;max-width:80%;line-height:1.3}
+body.beamer-mode .beamer-view .question{font-size:3rem;color:var(--ink);margin:30px auto;max-width:85%;line-height:1.3}
 body.beamer-mode .beamer-view .photo-box{max-width:500px;aspect-ratio:1}
 body.beamer-mode .beamer-view .photo-box img{object-fit:cover}
 body.beamer-mode .beamer-view .sub-big{font-size:1.5rem;opacity:.7;margin:10px 0}
@@ -144,43 +138,38 @@ body.beamer-mode .beamer-view .big-timer.warn{color:var(--orange)}
 body.beamer-mode .beamer-view .big-timer.crit{color:var(--red);animation:pulse 1s infinite}
 @keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.1)}}
 body.beamer-mode .beamer-view .qprog{font-size:1.2rem;opacity:.5;letter-spacing:3px;text-transform:uppercase;margin-bottom:20px}
-body.beamer-mode .beamer-view .team-score-big{display:grid;grid-template-columns:1fr 1fr;gap:30px;margin-top:40px;max-width:1000px;width:100%;align-self:center}
-body.beamer-mode .beamer-view .team-score-big .tcard{padding:40px;border-radius:20px;border:3px solid var(--border)}
-body.beamer-mode .beamer-view .team-score-big .tcard.braut{background:rgba(232,164,184,.1);border-color:var(--braut)}
-body.beamer-mode .beamer-view .team-score-big .tcard.braeutigam{background:rgba(107,163,199,.1);border-color:var(--braeutigam)}
-body.beamer-mode .beamer-view .team-score-big .tcard .label{font-size:1.8rem;text-transform:uppercase;letter-spacing:3px;opacity:.8}
-body.beamer-mode .beamer-view .team-score-big .tcard .value{font-size:7rem;font-weight:900;margin:10px 0}
+body.beamer-mode .beamer-view .team-score-big{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:24px;margin-top:40px;max-width:1200px;width:100%;align-self:center}
+body.beamer-mode .beamer-view .team-score-big .tcard{padding:28px;border-radius:20px;border:3px solid var(--tcol,var(--border));background:color-mix(in srgb,var(--tcol,#888) 10%,transparent)}
+body.beamer-mode .beamer-view .team-score-big .tcard .label{font-size:1.5rem;letter-spacing:1px;opacity:.85}
+body.beamer-mode .beamer-view .team-score-big .tcard .value{font-size:5rem;font-weight:900;margin:10px 0}
 body.beamer-mode .beamer-view .team-score-big .tcard .sublabel{font-size:1rem;opacity:.5}
-body.beamer-mode .beamer-view .team-score-big .tcard.braut .value{color:var(--braut)}
-body.beamer-mode .beamer-view .team-score-big .tcard.braeutigam .value{color:var(--braeutigam)}
-body.beamer-mode .beamer-view .tap-live{font-size:9rem;font-weight:900}
+body.beamer-mode .beamer-view .tap-live{font-size:5.5rem;font-weight:900}
+body.beamer-mode .beamer-view .teen-row-big{display:flex;flex-wrap:wrap;gap:16px;justify-content:center;margin-top:30px}
+body.beamer-mode .beamer-view .teen-row-big .tchip{padding:16px 26px;border-radius:16px;font-size:1.8rem;border:3px solid var(--tcol);background:color-mix(in srgb,var(--tcol) 14%,transparent)}
 </style>
 </head>
 <body>
 
 <!-- ===== LOGIN ===== -->
 <div id="login">
-  <div class="landing-logo" id="landingLogo">♥ HOCHZEIT ♥</div>
-  <div class="landing-sub" id="coupleName">Das Rate-Spiel</div>
+  <div class="landing-logo" id="landingLogo">✦ Teens-Abschluss ✦</div>
+  <div class="landing-sub" id="coupleName">Mitmach-Spiel</div>
   <div class="landing-card">
-    <div class="landing-emoji">💍</div>
+    <div class="landing-emoji">🎉</div>
     <h2 style="margin:6px 0">Herzlich willkommen!</h2>
-    <div class="sub">Gib deinen Namen ein und wähle dein Team</div>
-    <input id="nameInp" placeholder="Dein Name" maxlength="24" autocomplete="off">
-    <div class="team-pick" id="teamPick">
-      <button class="team-btn" data-team="braut"><span class="ic">👰</span>Team Braut</button>
-      <button class="team-btn" data-team="braeutigam"><span class="ic">🤵</span>Team Bräutigam</button>
-    </div>
+    <div class="sub">Name ist freiwillig. Wähle ein Teen, das du anfeuern (oder kennenlernen) willst – oder bleib offen.</div>
+    <input id="nameInp" placeholder="Dein Name (optional)" maxlength="24" autocomplete="off">
+    <div class="team-pick" id="teamPick"><!-- wird aus den Teens generiert --></div>
     <button id="btnJoin">Mitmachen</button>
     <button id="btnHost" class="btn-ghost hidden" style="margin-top:8px">👑 Als Host starten (kein Team)</button>
   </div>
-  <div class="host-hint">v2 · 3× Logo tippen für Host-Modus</div>
+  <div class="host-hint">PoC · 3× Logo tippen für Host-Modus</div>
 </div>
 
 <!-- ===== APP (player view) ===== -->
 <div id="app" class="wrap hidden">
   <div class="topbar">
-    <h1>♥ Rate-Abend</h1>
+    <h1>✦ Teens-Abschluss</h1>
     <div class="badge" id="userBadge"></div>
   </div>
 
@@ -210,7 +199,7 @@ body.beamer-mode .beamer-view .tap-live{font-size:9rem;font-weight:900}
   <!-- SCORE TAB -->
   <div id="tabScore" class="tabPane hidden">
     <div class="card">
-      <h2 style="text-align:center">Team-Stand</h2>
+      <h2 style="text-align:center">Fan-Teams</h2>
       <div class="team-board" id="teamBoard"></div>
     </div>
     <div class="card">
@@ -240,14 +229,14 @@ body.beamer-mode .beamer-view .tap-live{font-size:9rem;font-weight:900}
       <div class="card">
         <h3>🔥 Zwischenspiel</h3>
         <button id="btnStartTap" class="btn-orange">⚡ Tap-Duell starten (15 Sek)</button>
-        <div class="sub">Team mit den meisten Taps pro Person gewinnt 1 Rundensieg.</div>
+        <div class="sub">Fan-Team mit den meisten Taps pro Person gewinnt 1 Rundensieg.</div>
       </div>
 
       <div class="card">
         <h3>🔧 Laufendes Spiel</h3>
         <div id="runningStatus" class="sub">Kein Spiel aktiv</div>
         <button id="btnReveal" class="btn-green" disabled>✓ Jetzt auflösen</button>
-        <button id="btnNextQ" class="btn-gold hidden">➡️ Nächste Frage</button>
+        <button id="btnNextQ" class="hidden">➡️ Nächste Frage</button>
         <button id="btnAddTime" class="btn-ghost btn-sm" style="width:auto" disabled>+10 Sek</button>
         <button id="btnEndGame" class="btn-red">✗ Abbrechen</button>
       </div>
@@ -261,12 +250,6 @@ body.beamer-mode .beamer-view .tap-live{font-size:9rem;font-weight:900}
 
       <div class="card">
         <h3>⚙️ Einstellungen</h3>
-        <div class="row">
-          <input id="nameBraut" placeholder="Name Braut">
-          <input id="nameBraeutigam" placeholder="Name Bräutigam">
-        </div>
-        <button id="btnSaveNames" class="btn-ghost btn-sm" style="width:auto">Namen speichern</button>
-        <hr>
         <button class="btn-ghost" id="btnResetScores">Alle Scores auf 0</button>
         <button class="btn-red" id="btnFullReset">⚠️ Kompletter Neustart</button>
       </div>
